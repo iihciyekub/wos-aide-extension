@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.1.2 - 2026-07-10
+
+### Added
+- Added a configurable PDF batch size with a default of 50.
+- Added second-based PDF download and batch interval controls with decimal values such as `0.2`.
+- Added drag-and-drop text-file DOI extraction to the PDF Batch Downloader by reusing the existing DOI parser.
+- Added compatibility for Web of Science legacy `webofknowledge.com` and `isiknowledge.com` hosts.
+
+### Changed
+- Moved WoS shortcuts into an independent horizontal floating toolbar attached to the top center of the viewport.
+- Changed SID handling to copy directly to the clipboard with one click and inline success or failure feedback.
+- Made Journal Query and WOS Query icons appear whenever their corresponding features are enabled; provider verification now controls request readiness rather than visibility.
+- Reworked the PDF Batch Downloader with aligned controls and a black, gray, and white interface.
+- Changed WoS API calls from a hard-coded `www.webofscience.com` origin to same-origin relative endpoints for better host and proxy compatibility.
+
+### Fixed
+- Prevented toolbar shortcuts from shifting into the center of the expanded native WoS sidebar.
+- Fixed sub-second cooldown handling and empty numeric-input fallback behavior in PDF batch downloads.
+- Updated settings hints so they match the new enabled-versus-verified behavior.
+
 ## 0.1.1 - 2026-03-30
 
 ### Added

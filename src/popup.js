@@ -342,7 +342,7 @@ import './popup.css';
         updateEasyScholarApiKeyHint('Verified. Journal Query is available.', 'status--success');
         return;
       }
-      updateEasyScholarApiKeyHint('Enabled, but the key must pass Test before Journal Query appears.', 'status--info');
+      updateEasyScholarApiKeyHint('Journal Query is visible. Test the key before sending requests.', 'status--info');
     };
 
     const syncEasyScholarStateToTab = (tabId, apiKey, verified, enabled, onComplete) => {
@@ -460,7 +460,7 @@ import './popup.css';
       setEasyScholarStoredState(
         key,
         false,
-        key ? 'Key saved. Test must pass before Journal Query is visible.' : 'EasyScholar key cleared.',
+        key ? 'Key saved. Test it before sending Journal Query requests.' : 'EasyScholar key cleared.',
         key ? 'status--info' : 'status--muted',
         key ? 'EasyScholar key saved, verification required' : 'EasyScholar key cleared',
         key ? 'status--info' : 'status--muted'
@@ -706,7 +706,7 @@ import './popup.css';
         return;
       }
       if (!getCurrentProviderVerified()) {
-        updateWosQueryProviderHint(`${providerLabel} is selected, but it must pass Test before WOS Query appears.`, 'status--info');
+        updateWosQueryProviderHint(`WOS Query is visible. Test ${providerLabel} before sending requests.`, 'status--info');
         return;
       }
       updateWosQueryProviderHint(`WOS Query is enabled and verified with ${providerLabel}.`, 'status--success');

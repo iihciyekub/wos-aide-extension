@@ -1,4 +1,5 @@
-const isWosPage = () => /(^|\.)webofscience\.com$/i.test(window.location.hostname || '');
+const WOS_HOST_PATTERN = /(^|\.)(webofscience\.com|webofknowledge\.com|isiknowledge\.com)$/i;
+const isWosPage = () => WOS_HOST_PATTERN.test(window.location.hostname || '');
 const isChatGptPage = () => /(^|\.)chatgpt\.com$/i.test(window.location.hostname || '');
 const isSameWindowMessage = (event) => event?.source === window;
 const allowStorageBridge = () => isWosPage() || isChatGptPage();
@@ -167,44 +168,25 @@ let bridgePromise = null;
 
 const CHAT_API_KEY_STORAGE_KEY = 'wosOpenaiApiKey';
 const CHAT_MODEL_STORAGE_KEY = 'wosOpenaiChatModel';
-const EASYSCHOLAR_VERIFIED_STORAGE_KEY = 'wos-easyscholar-api-key-verified';
-const WOS_QUERY_PROVIDER_STORAGE_KEY = 'wosQueryProvider';
-const WOS_QUERY_OPENAI_VERIFIED_STORAGE_KEY = 'wosOpenaiVerified';
-const WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY = 'wosLmStudioVerified';
 const GENERATE_WOS_QUERY_REQUEST_EVENT = '__WOS_AIDE_GENERATE_WOS_QUERY_REQUEST__';
 const GENERATE_WOS_QUERY_RESPONSE_EVENT = '__WOS_AIDE_GENERATE_WOS_QUERY_RESPONSE__';
 const FETCH_EASYSCHOLAR_RANK_REQUEST_EVENT = '__WOS_AIDE_FETCH_EASYSCHOLAR_RANK_REQUEST__';
 const FETCH_EASYSCHOLAR_RANK_RESPONSE_EVENT = '__WOS_AIDE_FETCH_EASYSCHOLAR_RANK_RESPONSE__';
 const WOS_TOOLBAR_SHORTCUTS_ID = 'wos-aide-toolbar-shortcuts';
 const WOS_TOOLBAR_SHORTCUTS_STYLE_ID = 'wos-aide-toolbar-shortcuts-style';
-const WOS_TOOLBAR_INFO_POPUP_ID = 'wos-aide-toolbar-info-popup';
 const WOS_FONT_AWESOME_LINK_ID = 'wosAide-fontawesome';
 const WOS_DOI_QUERY_PANEL_MODE_EVENT = '__WOS_DOI_QUERY_PANEL_MODE__';
 const WOS_DOI_QUERY_PANEL_STATE_EVENT = '__WOS_DOI_QUERY_PANEL_STATE__';
 const GET_WOS_SID_INFO_REQUEST_EVENT = '__WOS_AIDE_GET_SID_INFO__';
 const GET_WOS_SID_INFO_RESPONSE_EVENT = '__WOS_AIDE_GET_SID_INFO_RESPONSE__';
 let isEasyScholarEnabledForToolbar = false;
-let isEasyScholarVerifiedForToolbar = false;
 let isWosQueryEnabledForToolbar = false;
-let wosQueryProviderForToolbar = 'openai';
-let isWosQueryOpenAIVerifiedForToolbar = false;
-let isWosQueryLmStudioVerifiedForToolbar = false;
 let currentToolbarPanelMode = 'batch';
 let currentToolbarPanelTab = '';
-let activeWosToolbarPopupTrigger = null;
 let fontAwesomeReadyPromise = null;
-const isJournalQueryAvailableForToolbar = () => (
-  isEasyScholarEnabledForToolbar && isEasyScholarVerifiedForToolbar
-);
+const isJournalQueryAvailableForToolbar = () => isEasyScholarEnabledForToolbar;
 
-const isWosQueryAvailableForToolbar = () => {
-  if (!isWosQueryEnabledForToolbar) {
-    return false;
-  }
-  return wosQueryProviderForToolbar === 'lmstudio'
-    ? isWosQueryLmStudioVerifiedForToolbar
-    : isWosQueryOpenAIVerifiedForToolbar;
-};
+const isWosQueryAvailableForToolbar = () => isWosQueryEnabledForToolbar;
 
 const resolveDefaultWosPanelTab = (preferredTab) => {
   if (preferredTab) {
@@ -385,101 +367,30 @@ const copyTextToClipboard = async (text) => {
   }
 };
 
-const closeWosToolbarInfoPopup = () => {
-  const popup = document.getElementById(WOS_TOOLBAR_INFO_POPUP_ID);
-  if (popup) {
-    popup.remove();
-  }
-  if (activeWosToolbarPopupTrigger) {
-    activeWosToolbarPopupTrigger.setAttribute('aria-expanded', 'false');
-    activeWosToolbarPopupTrigger = null;
-  }
-};
-
-const createWosToolbarInfoActionButton = (label, value, emptyLabel) => {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'wos-aide-toolbar-info-action';
-
-  if (!value) {
-    button.disabled = true;
-    button.textContent = emptyLabel;
-    return button;
-  }
-
-  button.textContent = label;
-  let restoreTimer = null;
-  button.addEventListener('click', async (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const copied = await copyTextToClipboard(value);
-    if (copied) {
-      closeWosToolbarInfoPopup();
-      return;
-    }
-
-    const originalLabel = label;
-    button.textContent = 'Copy failed';
-
-    if (restoreTimer) {
-      clearTimeout(restoreTimer);
-    }
-    restoreTimer = window.setTimeout(() => {
-      button.textContent = originalLabel;
-      restoreTimer = null;
-    }, 1400);
-  });
-
-  return button;
-};
-
-const showWosToolbarInfoPopup = async (triggerButton) => {
-  if (!triggerButton) {
-    return;
-  }
-
-  if (activeWosToolbarPopupTrigger === triggerButton && document.getElementById(WOS_TOOLBAR_INFO_POPUP_ID)) {
-    closeWosToolbarInfoPopup();
-    return;
-  }
-
-  closeWosToolbarInfoPopup();
-
+const copyWosSidFromToolbar = async (button) => {
+  if (button.dataset.copying === 'true') return;
+  button.dataset.copying = 'true';
+  const originalHtml = button.innerHTML;
+  const originalTitle = button.title;
   const { sid } = await getWosSidInfo();
-  if (!document.body && !document.documentElement) {
-    return;
-  }
+  const copied = Boolean(sid) && await copyTextToClipboard(sid);
 
-  const popup = document.createElement('div');
-  popup.id = WOS_TOOLBAR_INFO_POPUP_ID;
-  popup.setAttribute('role', 'dialog');
-  popup.setAttribute('aria-label', 'SID Info');
-  popup.addEventListener('click', (event) => {
-    event.stopPropagation();
-  });
+  button.innerHTML = copied
+    ? '<i class="fa-solid fa-check wos-aide-toolbar-icon" aria-hidden="true"></i>'
+    : '<i class="fa-solid fa-xmark wos-aide-toolbar-icon" aria-hidden="true"></i>';
+  button.title = copied ? 'SID copied' : (sid ? 'SID copy failed' : 'SID not found');
+  button.setAttribute('aria-label', button.title);
+  button.classList.toggle('is-copy-success', copied);
+  button.classList.toggle('is-copy-error', !copied);
+  delete button.dataset.copying;
 
-  const title = document.createElement('div');
-  title.className = 'wos-aide-toolbar-info-title';
-  title.textContent = sid ? `SID: ${sid}` : 'SID not found';
-  popup.appendChild(title);
-
-  popup.appendChild(createWosToolbarInfoActionButton('Copy SID', sid, 'SID unavailable'));
-
-  (document.body || document.documentElement).appendChild(popup);
-
-  const rect = triggerButton.getBoundingClientRect();
-  const popupRect = popup.getBoundingClientRect();
-  const preferredTop = rect.top + (rect.height / 2) - (popupRect.height / 2);
-  const maxTop = Math.max(12, window.innerHeight - popupRect.height - 12);
-  const top = Math.min(Math.max(12, preferredTop), maxTop);
-  const maxLeft = Math.max(12, window.innerWidth - popupRect.width - 12);
-  const left = Math.min(rect.right + 12, maxLeft);
-  popup.style.top = `${top}px`;
-  popup.style.left = `${left}px`;
-
-  activeWosToolbarPopupTrigger = triggerButton;
-  activeWosToolbarPopupTrigger.setAttribute('aria-expanded', 'true');
+  window.setTimeout(() => {
+    if (!button.isConnected) return;
+    button.innerHTML = originalHtml;
+    button.title = originalTitle;
+    button.setAttribute('aria-label', originalTitle);
+    button.classList.remove('is-copy-success', 'is-copy-error');
+  }, 1200);
 };
 
 const renderWosToolbarShortcutButtons = (shortcutsWrap) => {
@@ -503,13 +414,12 @@ const renderWosToolbarShortcutButtons = (shortcutsWrap) => {
     }
     button.title = title;
     button.setAttribute('aria-label', title);
-    button.setAttribute('aria-expanded', 'false');
     button.innerHTML = iconHtml;
     button.addEventListener('click', async (event) => {
       event.preventDefault();
       event.stopPropagation();
       if (action === 'sid-info') {
-        await showWosToolbarInfoPopup(button);
+        await copyWosSidFromToolbar(button);
         return;
       }
       if (isWosToolbarShortcutPanelActive(preferredTab)) {
@@ -834,26 +744,30 @@ const ensureWosToolbarShortcutsStyle = () => {
   style.id = WOS_TOOLBAR_SHORTCUTS_STYLE_ID;
   style.textContent = `
 #${WOS_TOOLBAR_SHORTCUTS_ID} {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  margin-top: 10px;
-}
-#${WOS_TOOLBAR_SHORTCUTS_ID}[data-floating-fallback="true"] {
   position: fixed;
-  top: 50%;
-  left: 12px;
-  width: 42px;
-  margin-top: 0;
-  transform: translateY(-50%);
+  top: 0;
+  left: 50%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: auto;
+  margin: 0;
+  padding: 6px;
+  transform: translateX(-50%);
   z-index: 999998;
-  padding: 6px 0;
+  border: 1px solid rgba(74, 59, 136, 0.14);
+  border-radius: 0 0 14px 14px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 24px rgba(33, 30, 53, 0.16);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-sizing: border-box;
 }
 #${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-btn {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border: none;
   border-radius: 12px;
   background: transparent;
@@ -870,6 +784,8 @@ const ensureWosToolbarShortcutsStyle = () => {
   outline: none;
   box-shadow: none;
   -webkit-tap-highlight-color: transparent;
+  margin: 0;
+  flex: 0 0 auto;
 }
 #${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-btn:hover {
   background: #f1f1f4;
@@ -899,72 +815,21 @@ const ensureWosToolbarShortcutsStyle = () => {
   border-radius: 999px;
 }
 #${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-icon {
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1;
   display: inline-block;
   pointer-events: none;
 }
-#${WOS_TOOLBAR_INFO_POPUP_ID} {
-  position: fixed;
-  top: 12px;
-  left: 12px;
-  width: 220px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid rgba(74, 59, 136, 0.12);
-  box-shadow: 0 16px 36px rgba(33, 30, 53, 0.18);
-  z-index: 999999;
+#${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-btn.is-copy-success {
+  background: #edf7f0;
+  color: #237a45;
 }
-#${WOS_TOOLBAR_INFO_POPUP_ID} .wos-aide-toolbar-info-title {
-  font-size: 12px;
-  line-height: 1.45;
-  color: #3d3656;
-  word-break: break-all;
-}
-#${WOS_TOOLBAR_INFO_POPUP_ID} .wos-aide-toolbar-info-action {
-  width: 100%;
-  min-height: 36px;
-  border: 1px solid rgba(74, 59, 136, 0.14);
-  border-radius: 10px;
-  background: #f7f6fb;
-  color: #3d3656;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
-}
-#${WOS_TOOLBAR_INFO_POPUP_ID} .wos-aide-toolbar-info-action:hover:not(:disabled) {
-  background: #efedf8;
-  border-color: rgba(74, 59, 136, 0.24);
-}
-#${WOS_TOOLBAR_INFO_POPUP_ID} .wos-aide-toolbar-info-action:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
+#${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-btn.is-copy-error {
+  background: #f8eeee;
+  color: #a33a3a;
 }
 `;
   (document.head || document.documentElement).appendChild(style);
-};
-
-const getWosToolbarShortcutMountTarget = () => {
-  const topSticky = document.querySelector('.top-sticky');
-  if (!topSticky) {
-    return {
-      container: null,
-      anchor: null
-    };
-  }
-
-  const alertsButton = topSticky.querySelector('[data-pendo-menu-alerts]');
-  const anchor = alertsButton?.parentElement === topSticky ? alertsButton : null;
-
-  return {
-    container: topSticky,
-    anchor
-  };
 };
 
 const ensureWosToolbarShortcuts = () => {
@@ -981,7 +846,6 @@ const ensureWosToolbarShortcuts = () => {
     return;
   }
 
-  const { container: toolbar, anchor: alertsButton } = getWosToolbarShortcutMountTarget();
   ensureWosToolbarShortcutsStyle();
 
   const existing = document.getElementById(WOS_TOOLBAR_SHORTCUTS_ID);
@@ -994,21 +858,9 @@ const ensureWosToolbarShortcuts = () => {
       renderWosToolbarShortcutButtons(existing);
     }
     syncWosToolbarShortcutActiveState();
-    if (toolbar) {
-      const existingParent = existing.parentElement;
-      existing.dataset.floatingFallback = 'false';
-      if (existingParent !== toolbar || (alertsButton && existing.previousElementSibling !== alertsButton)) {
-        if (alertsButton) {
-          alertsButton.insertAdjacentElement('afterend', existing);
-        } else {
-          toolbar.insertAdjacentElement('beforeend', existing);
-        }
-      }
-    } else {
-      existing.dataset.floatingFallback = 'true';
-      if (existing.parentElement !== document.body) {
-        document.body.appendChild(existing);
-      }
+    const mountRoot = document.body || document.documentElement;
+    if (mountRoot && existing.parentElement !== mountRoot) {
+      mountRoot.appendChild(existing);
     }
     return;
   }
@@ -1016,18 +868,7 @@ const ensureWosToolbarShortcuts = () => {
   const shortcutsWrap = document.createElement('div');
   shortcutsWrap.id = WOS_TOOLBAR_SHORTCUTS_ID;
   renderWosToolbarShortcutButtons(shortcutsWrap);
-
-  if (toolbar) {
-    shortcutsWrap.dataset.floatingFallback = 'false';
-    if (alertsButton) {
-      alertsButton.insertAdjacentElement('afterend', shortcutsWrap);
-    } else {
-      toolbar.insertAdjacentElement('beforeend', shortcutsWrap);
-    }
-  } else {
-    shortcutsWrap.dataset.floatingFallback = 'true';
-    (document.body || document.documentElement).appendChild(shortcutsWrap);
-  }
+  (document.body || document.documentElement).appendChild(shortcutsWrap);
 };
 
 document.addEventListener(WOS_DOI_QUERY_PANEL_MODE_EVENT, (event) => {
@@ -1056,29 +897,6 @@ document.addEventListener('__WOS_DOI_QUERY_SWITCH_TAB__', (event) => {
   requestAnimationFrame(() => {
     syncWosToolbarShortcutActiveState();
   });
-});
-
-document.addEventListener('click', (event) => {
-  const popup = document.getElementById(WOS_TOOLBAR_INFO_POPUP_ID);
-  if (!popup) {
-    return;
-  }
-
-  if (popup.contains(event.target)) {
-    return;
-  }
-
-  if (activeWosToolbarPopupTrigger?.contains(event.target)) {
-    return;
-  }
-
-  closeWosToolbarInfoPopup();
-});
-
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') {
-    closeWosToolbarInfoPopup();
-  }
 });
 
 let wosToolbarBootstrapStarted = false;
@@ -1450,18 +1268,10 @@ document.addEventListener('keydown', (event) => {
 if (isWosPage()) {
   chrome.storage.local.get([
     'easyscholarEnabled',
-    EASYSCHOLAR_VERIFIED_STORAGE_KEY,
-    'wosQueryEnabled',
-    WOS_QUERY_PROVIDER_STORAGE_KEY,
-    WOS_QUERY_OPENAI_VERIFIED_STORAGE_KEY,
-    WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY
+    'wosQueryEnabled'
   ], result => {
     isEasyScholarEnabledForToolbar = Boolean(result.easyscholarEnabled);
-    isEasyScholarVerifiedForToolbar = Boolean(result[EASYSCHOLAR_VERIFIED_STORAGE_KEY]);
     isWosQueryEnabledForToolbar = Boolean(result.wosQueryEnabled);
-    wosQueryProviderForToolbar = (result[WOS_QUERY_PROVIDER_STORAGE_KEY] || 'openai').toString().trim().toLowerCase() || 'openai';
-    isWosQueryOpenAIVerifiedForToolbar = Boolean(result[WOS_QUERY_OPENAI_VERIFIED_STORAGE_KEY]);
-    isWosQueryLmStudioVerifiedForToolbar = Boolean(result[WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY]);
     bootstrapWosToolbarShortcuts();
     ensureWosToolbarShortcuts();
   });
@@ -1505,24 +1315,8 @@ if (isWosPage()) {
       isEasyScholarEnabledForToolbar = Boolean(changes.easyscholarEnabled.newValue);
       shouldRefreshToolbar = true;
     }
-    if (changes[EASYSCHOLAR_VERIFIED_STORAGE_KEY]) {
-      isEasyScholarVerifiedForToolbar = Boolean(changes[EASYSCHOLAR_VERIFIED_STORAGE_KEY].newValue);
-      shouldRefreshToolbar = true;
-    }
     if (changes.wosQueryEnabled) {
       isWosQueryEnabledForToolbar = Boolean(changes.wosQueryEnabled.newValue);
-      shouldRefreshToolbar = true;
-    }
-    if (changes[WOS_QUERY_PROVIDER_STORAGE_KEY]) {
-      wosQueryProviderForToolbar = (changes[WOS_QUERY_PROVIDER_STORAGE_KEY].newValue || 'openai').toString().trim().toLowerCase() || 'openai';
-      shouldRefreshToolbar = true;
-    }
-    if (changes[WOS_QUERY_OPENAI_VERIFIED_STORAGE_KEY]) {
-      isWosQueryOpenAIVerifiedForToolbar = Boolean(changes[WOS_QUERY_OPENAI_VERIFIED_STORAGE_KEY].newValue);
-      shouldRefreshToolbar = true;
-    }
-    if (changes[WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY]) {
-      isWosQueryLmStudioVerifiedForToolbar = Boolean(changes[WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY].newValue);
       shouldRefreshToolbar = true;
     }
     if (changes.wosAideProjectName) {

@@ -3,7 +3,8 @@
 
 (function() {
     // Only load on Web of Science domain
-    if (!window.location.hostname.includes('webofscience.com')) {
+    const wosHostPattern = /(^|\.)(webofscience\.com|webofknowledge\.com|isiknowledge\.com)$/i;
+    if (!wosHostPattern.test(window.location.hostname || '')) {
         return;
     }
 

@@ -14,7 +14,9 @@ Core features:
 - WOS query builder with OpenAI or a user-configured local LM Studio endpoint
 - Journal lookup with EasyScholar
 - DOI workflow helpers and export-related utilities
-- Optional PDF batch download helper
+- PDF batch downloads with configurable batch size and second-based delays
+- Drag-and-drop DOI extraction from user-selected text files
+- A top-center floating shortcut toolbar with one-click SID copy
 
 WOS Aide stores settings locally in the browser and only contacts third-party services when the user explicitly enables and uses those features.
 
@@ -37,7 +39,7 @@ Used to store:
 
 ### clipboardWrite
 
-Used when the user explicitly copies workflow content.
+Used when the user explicitly copies workflow content, including one-click SID copy.
 
 ### activeTab
 
@@ -48,6 +50,12 @@ Used so the extension can interact only with the tab the user is currently using
 Used to inject the extension UI and tools into supported pages when needed.
 
 ### Host permissions
+
+Supported Web of Science page access:
+
+- `https://*.webofscience.com/*`
+- `*://*.webofknowledge.com/*` for legacy compatibility
+- `*://*.isiknowledge.com/*` for legacy compatibility
 
 `https://api.openai.com/*`
 
@@ -75,7 +83,6 @@ WOS Aide exists to help researchers perform Web of Science query building, journ
 
 ## Pre-submission Checklist
 
-- Replace the contact section in `PRIVACY.md` with your real support contact.
 - Host the privacy policy at a public HTTPS URL before submission.
 - Remove `build.pem` from the working directory and keep it outside the repo.
 - Double-check that the Web Store data disclosure form matches the behavior described in `PRIVACY.md`.

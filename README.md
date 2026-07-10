@@ -5,12 +5,13 @@ WOS Aide is a Chrome extension for Web of Science users. It helps streamline com
 ## What It Does
 
 - Open a floating Batch Query panel directly on Web of Science pages
-- Show sticky or floating toolbar shortcuts for quick WoS actions
+- Show an independent horizontal shortcut toolbar at the top center of supported pages
 - Build and run WoS queries with OpenAI or LM Studio
 - Run DOI-based and journal-based lookup workflows
 - Export WoS records in TXT or BIB format
-- Copy the current WoS SID quickly from the panel header or toolbar shortcut
-- Batch download PDFs from DOI lists
+- Copy the current WoS SID to the clipboard with one toolbar click
+- Batch download PDFs with configurable batch size and second-based delays
+- Drop text, CSV, RIS, BibTeX, JSON, or XML files into the PDF panel to extract DOI values automatically
 
 ## Main Panels
 
@@ -29,6 +30,14 @@ WOS Aide is a Chrome extension for Web of Science users. It helps streamline com
   - OpenAI API key
   - LM Studio local endpoint
   - EasyScholar API key
+
+## Supported Web of Science Hosts
+
+- `*.webofscience.com`
+- `*.webofknowledge.com` for legacy compatibility
+- `*.isiknowledge.com` for legacy compatibility
+
+Institution-specific proxy hosts may require separate permission because their domains are controlled by the institution rather than Web of Science.
 
 ## Development
 
@@ -50,7 +59,7 @@ Create a production build:
 npm run build
 ```
 
-The packaged extension files are generated in the `build/` directory.
+The packaged extension files are generated in the `build/` directory. Release ZIP files are created from the contents of that directory so `manifest.json` remains at the archive root.
 
 ## Install Locally
 

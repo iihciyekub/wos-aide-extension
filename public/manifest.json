@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "WOS Aide",
   "$schema": "https://json.schemastore.org/chrome-manifest.json",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "WOS Aide Chrome Extension",
   "icons": {
     "16": "icons/icon_16.png",
@@ -33,7 +33,9 @@
     {
       "matches": [
         "https://www.webofscience.com/*",
-        "https://*.webofscience.com/*"
+        "https://*.webofscience.com/*",
+        "*://*.webofknowledge.com/*",
+        "*://*.isiknowledge.com/*"
       ],
       "run_at": "document_idle",
       "js": [
@@ -53,7 +55,9 @@
     {
       "matches": [
         "https://www.webofscience.com/*",
-        "https://*.webofscience.com/*"
+        "https://*.webofscience.com/*",
+        "*://*.webofknowledge.com/*",
+        "*://*.isiknowledge.com/*"
       ],
       "run_at": "document_start",
       "js": [
@@ -80,7 +84,9 @@
       ],
       "matches": [
         "https://www.webofscience.com/*",
-        "https://*.webofscience.com/*"
+        "https://*.webofscience.com/*",
+        "*://*.webofknowledge.com/*",
+        "*://*.isiknowledge.com/*"
       ]
     },
     {
