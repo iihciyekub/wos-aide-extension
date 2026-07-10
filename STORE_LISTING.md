@@ -83,6 +83,6 @@ WOS Aide exists to help researchers perform Web of Science query building, journ
 
 ## Pre-submission Checklist
 
-- Host the privacy policy at a public HTTPS URL before submission.
+- Verify the published privacy policy at `https://iihciyekub.github.io/wos-aide-extension/` before submission.
 - Remove `build.pem` from the working directory and keep it outside the repo.
 - Double-check that the Web Store data disclosure form matches the behavior described in `PRIVACY.md`.

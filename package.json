@@ -1,5 +1,5 @@
 {
-  "name": "wos_aide",
+  "name": "wos-aide-extension",
   "version": "0.1.2",
   "description": "WOS Aide Chrome Extension",
   "private": true,
