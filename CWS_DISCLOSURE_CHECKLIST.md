@@ -6,6 +6,8 @@ This file is a practical guide for filling the Chrome Web Store privacy section 
 
 Use this as a review checklist, then confirm it against the latest Chrome Web Store form wording at submission time.
 
+Published privacy policy: `https://iihciyekub.github.io/wos-aide-extension/`
+
 ## What The Extension Handles
 
 WOS Aide may handle:

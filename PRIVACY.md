@@ -103,4 +103,4 @@ Users can control their stored data by:
 
 For support or privacy questions, use the repository issue tracker:
 
-- https://github.com/iihciyekub/gewu_chrome_aide/issues
+- https://github.com/iihciyekub/wos-aide-extension/issues

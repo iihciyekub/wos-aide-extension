@@ -76,6 +76,7 @@ The packaged extension files are generated in the `build/` directory. Release ZI
 - Some features require the current page to be a valid Web of Science results page.
 - See [`CHANGELOG.md`](CHANGELOG.md) for recent product and UI updates.
 - See [`PRIVACY.md`](PRIVACY.md) for the current privacy policy draft.
+- Public privacy policy: https://iihciyekub.github.io/wos-aide-extension/
 - See [`STORE_LISTING.md`](STORE_LISTING.md) for Web Store submission notes and permission explanations.
 - See [`STORE_LISTING_BILINGUAL.md`](STORE_LISTING_BILINGUAL.md) for copy-ready English and Chinese store listing text.
 - See [`CWS_DISCLOSURE_CHECKLIST.md`](CWS_DISCLOSURE_CHECKLIST.md) for a suggested Chrome Web Store privacy disclosure checklist.

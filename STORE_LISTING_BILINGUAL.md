@@ -148,12 +148,12 @@ Host permissions:
 
 Before submission:
 
-- Publish the privacy policy at a public HTTPS URL.
+- Verify the published privacy policy at `https://iihciyekub.github.io/wos-aide-extension/`.
 - Make sure the Chrome Web Store privacy disclosure form matches the actual extension behavior.
 
 ### 中文
 
 提交前请确认：
 
-- 将隐私政策发布到可公开访问的 HTTPS 页面。
+- 确认隐私政策已发布在 `https://iihciyekub.github.io/wos-aide-extension/`。
 - 确保 Chrome Web Store 的隐私披露表单与扩展实际行为保持一致。
