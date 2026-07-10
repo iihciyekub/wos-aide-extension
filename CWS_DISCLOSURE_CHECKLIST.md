@@ -14,6 +14,7 @@ WOS Aide may handle:
 - User-entered research query text
 - Journal names entered or captured by the user
 - DOI lists used in the workflow
+- Text files explicitly dropped onto the PDF panel for local DOI extraction
 - Local settings and history stored in the browser
 
 ## Suggested Form Answers

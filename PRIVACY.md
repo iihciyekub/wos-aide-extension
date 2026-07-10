@@ -1,6 +1,6 @@
 # WOS Aide Privacy Policy
 
-Last updated: March 28, 2026
+Last updated: July 10, 2026
 
 ## Overview
 
@@ -64,7 +64,7 @@ The user's EasyScholar API key is used only to authenticate that request.
 
 ## Local File Access
 
-Some export and download features can ask the user to choose a local directory using the browser file picker. WOS Aide only accesses directories the user explicitly selects. Directory access is used to support user-requested research workflows such as reading or saving files locally.
+Some export and download features can ask the user to choose a local directory using the browser file picker. The PDF Batch Downloader can also read text files that the user explicitly drops onto its panel to extract DOI values locally. WOS Aide only accesses directories and files the user explicitly selects. This access supports user-requested research workflows such as reading DOI text or saving files locally.
 
 WOS Aide does not upload local files to a developer-operated server.
 
@@ -79,6 +79,7 @@ WOS Aide requests only the permissions needed for its functionality:
 
 Host permissions are used only for:
 
+- Supported Web of Science pages on `webofscience.com` and legacy-compatible `webofknowledge.com` or `isiknowledge.com` hosts
 - OpenAI API requests
 - EasyScholar API requests
 - User-configured local LM Studio endpoints
@@ -100,4 +101,6 @@ Users can control their stored data by:
 
 ## Contact
 
-If you publish this extension, replace this section with your real support contact email or website before submission.
+For support or privacy questions, use the repository issue tracker:
+
+- https://github.com/iihciyekub/gewu_chrome_aide/issues

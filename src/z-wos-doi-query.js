@@ -633,10 +633,17 @@ window.wosids = [];
         box.style.minHeight = `0px`;
         const margin = 16;
         const fallbackTop = Math.max(24, Math.round(window.innerHeight * 0.18));
+        const hasAnchor = Boolean(currentSingleAnchorRect);
         const anchorTop = currentSingleAnchorRect?.top ?? fallbackTop;
-        const anchorLeft = currentSingleAnchorRect?.left ?? 52;
-        const nextTop = Math.max(16, Math.round(anchorTop + (((currentSingleAnchorRect?.height || 38) - height) / 2)));
-        const nextLeft = Math.round(anchorLeft + (currentSingleAnchorRect?.width || 38) + margin);
+        const anchorLeft = currentSingleAnchorRect?.left ?? Math.round((window.innerWidth - width) / 2);
+        const anchorWidth = currentSingleAnchorRect?.width || 38;
+        const anchorHeight = currentSingleAnchorRect?.height || 38;
+        const nextTop = hasAnchor
+            ? Math.round(anchorTop + anchorHeight + margin)
+            : fallbackTop;
+        const nextLeft = hasAnchor
+            ? Math.round(anchorLeft + (anchorWidth / 2) - (width / 2))
+            : anchorLeft;
         const clamped = window.clampPanelPosition({
             top: `${nextTop}px`,
             left: `${nextLeft}px`,
@@ -820,7 +827,8 @@ window.wosids = [];
     setActiveTab('query');
 
     const applyJournalAccess = ({ enabled = false, verified = false } = {}) => {
-        const isAllowed = Boolean(enabled) && Boolean(verified);
+        const isAllowed = Boolean(enabled);
+        journalTabBtn.dataset.verified = String(Boolean(verified));
         journalTabBtn.style.display = isAllowed ? 'block' : 'none';
         if (!isAllowed && journalTabPanel.style.display !== 'none') {
             setActiveTab('query');
@@ -828,7 +836,8 @@ window.wosids = [];
     };
 
     const applyWosQueryAccess = ({ enabled = false, verified = false } = {}) => {
-        const isAllowed = Boolean(enabled) && Boolean(verified);
+        const isAllowed = Boolean(enabled);
+        builderTabBtn.dataset.verified = String(Boolean(verified));
         builderTabBtn.style.display = isAllowed ? 'block' : 'none';
         if (!isAllowed && builderTabPanel.style.display !== 'none') {
             setActiveTab('query');

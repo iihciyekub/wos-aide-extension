@@ -1467,14 +1467,14 @@ class WosUUID {
             "id": uuid
         };
         try {
-            const response = await fetch('https://www.webofscience.com/api/esti/SearchEngine/retrieve', {
+            const response = await fetch('/api/esti/SearchEngine/retrieve', {
                 method: 'POST',
                 headers: {
                     'accept': 'application/json',
                     'accept-language': 'en,zh-TW;q=0.9,zh;q=0.8',
                     'cache-control': 'no-cache',
                     'content-type': 'text/plain;charset=UTF-8',
-                    'origin': 'https://www.webofscience.com',
+                    'origin': window.location.origin,
                     'pragma': 'no-cache',
                     'priority': 'u=1, i',
                     'referer': window.location.href,
@@ -1642,7 +1642,7 @@ class WosUUID {
         }
         // 发送请求
         try {
-            const response = await fetch('https://www.webofscience.com/api/wosnx/indic/export/saveToFile', {
+            const response = await fetch('/api/wosnx/indic/export/saveToFile', {
                 method: 'POST',
                 headers: {
                     'accept': 'application/json, text/plain, */*',
@@ -1697,7 +1697,7 @@ class WosUUID {
             "filters": filters
         };
         try {
-            const response = await fetch('https://www.webofscience.com/api/wosnx/indic/export/saveToFile', {
+            const response = await fetch('/api/wosnx/indic/export/saveToFile', {
                 method: 'POST',
                 headers: {
                     'accept': 'application/json, text/plain, */*',
@@ -2807,14 +2807,14 @@ class WosQuery {
      */
     async call_searchEngine_parse(text) {
         try {
-            const response = await fetch('https://www.webofscience.com/api/esti/SearchEngine/parse', {
+            const response = await fetch('/api/esti/SearchEngine/parse', {
                 method: 'POST',
                 headers: {
                     'accept': 'application/json',
                     'accept-language': 'en,zh-TW;q=0.9,zh;q=0.8',
                     'cache-control': 'no-cache',
                     'content-type': 'text/plain;charset=UTF-8',
-                    'origin': 'https://www.webofscience.com',
+                    'origin': window.location.origin,
                     'pragma': 'no-cache',
                     'priority': 'u=1, i',
                     'x-1p-wos-sid': window.sessionData.BasicProperties.SID,
