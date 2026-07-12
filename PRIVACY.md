@@ -1,6 +1,6 @@
 # WOS Aide Privacy Policy
 
-Last updated: July 10, 2026
+Last updated: July 13, 2026
 
 ## Overview
 
@@ -64,9 +64,15 @@ The user's EasyScholar API key is used only to authenticate that request.
 
 ## Local File Access
 
-Some export and download features can ask the user to choose a local directory using the browser file picker. The PDF Batch Downloader can also read text files that the user explicitly drops onto its panel to extract DOI values locally. WOS Aide only accesses directories and files the user explicitly selects. This access supports user-requested research workflows such as reading DOI text or saving files locally.
+Some export and download features can ask the user to choose a local directory using the browser file picker. The PDF Batch Downloader can also read text files that the user explicitly selects or drops onto its panel to extract DOI values locally. WOS Aide only accesses directories and files the user explicitly selects. This access supports user-requested research workflows such as reading DOI text or saving files locally.
 
 WOS Aide does not upload local files to a developer-operated server.
+
+## Limited Use and Security
+
+WOS Aide uses collected or accessed data only to provide and improve the extension's user-facing research workflow features. It does not use user data for advertising, creditworthiness, lending, or purposes unrelated to the extension's single purpose.
+
+Requests to supported remote services use HTTPS. API keys remain in local extension storage and are sent only to the service selected by the user for authentication. Local LM Studio connections may use HTTP because they connect to a user-configured service on the user's own device.
 
 ## Permissions
 
@@ -89,6 +95,8 @@ Host permissions are used only for:
 WOS Aide does not sell personal data.
 
 WOS Aide does not share user data with third parties except when the user explicitly uses a feature that requires sending the request to OpenAI, EasyScholar, or the user's own LM Studio endpoint.
+
+WOS Aide does not transfer user data to data brokers, advertisers, or other parties for personalized advertising.
 
 ## Data Retention and Control
 
