@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.1.3 - 2026-07-13
+
+### Added
+- Added Wiley, SAGE, and Springer URL templates to the PDF Batch Downloader.
+- Added a local file picker that extracts DOI values from multiple text and bibliography files using the existing DOI parser.
+- Persisted the selected PDF provider separately from its URL template so providers sharing the same path restore correctly.
+
+### Changed
+- Removed the redundant DOI Batch Query toggle from the extension popup.
+
+### Fixed
+- Made the PDF Batch Downloader wait for its scripts and panel DOM before reporting that it opened, eliminating repeated popup clicks.
+- Changed the local file picker to use a direct native file-input interaction so the file dialog opens on the first click.
+
 ## 0.1.2 - 2026-07-10
 
 ### Added

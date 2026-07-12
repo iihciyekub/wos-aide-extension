@@ -165,6 +165,7 @@ const MODULES = {
 
 let isBridgeReady = false;
 let bridgePromise = null;
+const moduleInjectionPromises = new Map();
 
 const CHAT_API_KEY_STORAGE_KEY = 'wosOpenaiApiKey';
 const CHAT_MODEL_STORAGE_KEY = 'wosOpenaiChatModel';
@@ -609,42 +610,50 @@ const requireWosPage = (sendResponse, featureName) => {
 const injectModule = (moduleId) => {
   const module = MODULES[moduleId];
   if (!module) {
-    console.error(`[ContentScript] Unknown module: ${moduleId}`);
-    return;
+    return Promise.reject(new Error(`Unknown module: ${moduleId}`));
   }
 
-  // 检查是否已注入
   if (document.getElementById(module.elementId)) {
-    return;
+    return Promise.resolve(document.getElementById(module.elementId));
   }
-  const existingMarker = document.querySelector(`script[data-inject="${module.injectMarker}"]`);
-  if (existingMarker) {
-    return;
+  if (moduleInjectionPromises.has(moduleId)) {
+    return moduleInjectionPromises.get(moduleId);
   }
 
-  // 顺序注入文件
-  const injectFiles = (files, index = 0) => {
-    if (index >= files.length) {
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = chrome.runtime.getURL(files[index]);
-    script.dataset.inject = module.injectMarker;
-    script.onload = function() {
-      if (index < files.length - 1) {
-        injectFiles(files, index + 1);
+  const injectionPromise = new Promise((resolve, reject) => {
+    const injectFile = (index) => {
+      if (index >= module.files.length) {
+        const element = document.getElementById(module.elementId);
+        if (element) {
+          resolve(element);
+        } else {
+          reject(new Error(`${module.name} loaded without creating its panel`));
+        }
+        return;
       }
-      this.remove();
-    };
-    script.onerror = function() {
-      console.error(`[ContentScript] Failed to inject ${files[index]} for ${module.name}`);
-      this.remove();
-    };
-    (document.head || document.documentElement).appendChild(script);
-  };
 
-  injectFiles(module.files);
+      const file = module.files[index];
+      const script = document.createElement('script');
+      script.src = chrome.runtime.getURL(file);
+      script.dataset.inject = module.injectMarker;
+      script.onload = function() {
+        this.remove();
+        injectFile(index + 1);
+      };
+      script.onerror = function() {
+        this.remove();
+        reject(new Error(`Failed to inject ${file} for ${module.name}`));
+      };
+      (document.head || document.documentElement).appendChild(script);
+    };
+
+    injectFile(0);
+  }).finally(() => {
+    moduleInjectionPromises.delete(moduleId);
+  });
+
+  moduleInjectionPromises.set(moduleId, injectionPromise);
+  return injectionPromise;
 };
 
 /**
@@ -690,7 +699,9 @@ const openWosDoiQueryPanel = (preferredTab, presentation = 'batch', anchorRect =
     return { success: true, visible: true, action: 'shown' };
   }
 
-  injectModule('wosDoiQuery');
+  injectModule('wosDoiQuery').catch((error) => {
+    console.error('[ContentScript] Failed to inject DOI Batch Query:', error);
+  });
   setTimeout(showPanel, 100);
   return { success: true, visible: true, action: 'injected' };
 };
@@ -725,7 +736,9 @@ const toggleWosDoiQueryPanel = (preferredTab) => {
     return { success: true, visible: nextVisible, action: 'toggled' };
   }
 
-  injectModule('wosDoiQuery');
+  injectModule('wosDoiQuery').catch((error) => {
+    console.error('[ContentScript] Failed to inject DOI Batch Query:', error);
+  });
   setTimeout(() => {
     setModuleVisibility('wosDoiQuery', true);
     if (resolvedTab === 'journal') {
@@ -1068,7 +1081,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    injectModule('wosDoiQuery');
+    injectModule('wosDoiQuery').catch((error) => {
+      console.error('[ContentScript] Failed to inject DOI Batch Query:', error);
+    });
     setTimeout(() => {
       setModuleVisibility('wosDoiQuery', true);
       setModuleVisibility('easyscholar', true);
@@ -1140,12 +1155,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    // 注入模块，然后等待一个短暂的时间再发送可见性事件
-    injectModule('doiPdfDownload');
-    setTimeout(() => {
+    injectModule('doiPdfDownload').then((injectedElement) => {
+      injectedElement.style.display = 'flex';
       setModuleVisibility('doiPdfDownload', true);
-    }, 100);
-    sendResponse({ success: true, action: 'injected' });
+      sendResponse({ success: true, action: 'injected' });
+    }).catch((error) => {
+      console.error('[ContentScript] Failed to open DOI PDF Download:', error);
+      sendResponse({ success: false, error: error.message });
+    });
     return true;
   }
 
@@ -1181,7 +1198,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    injectModule('openaiChat');
+    injectModule('openaiChat').catch((error) => {
+      console.error('[ContentScript] Failed to inject OpenAI Chat:', error);
+    });
     setTimeout(() => {
       setModuleVisibility('openaiChat', true);
     }, 100);
@@ -1283,14 +1302,18 @@ if (isWosPage()) {
   chrome.storage.local.get(['easyscholarEnabled'], result => {
     if (result.easyscholarEnabled) {
       setModuleVisibility('easyscholar', true);
-      injectModule('easyscholar');
+      injectModule('easyscholar').catch((error) => {
+        console.error('[ContentScript] Failed to inject EasyScholar:', error);
+      });
     }
   });
 
   chrome.storage.local.get(['openaiChatEnabled'], result => {
     if (result.openaiChatEnabled) {
       setModuleVisibility('openaiChat', true);
-      injectModule('openaiChat');
+      injectModule('openaiChat').catch((error) => {
+        console.error('[ContentScript] Failed to inject OpenAI Chat:', error);
+      });
     }
   });
 
@@ -1339,7 +1362,9 @@ if (isWosPage()) {
 chrome.storage.local.get(['doiPdfDownloadEnabled'], result => {
   if (result.doiPdfDownloadEnabled) {
     setModuleVisibility('doiPdfDownload', true);
-    injectModule('doiPdfDownload');
+    injectModule('doiPdfDownload').catch((error) => {
+      console.error('[ContentScript] Failed to inject DOI PDF Download:', error);
+    });
   }
 });
 

@@ -79,18 +79,6 @@ import './popup.css';
     }
   };
 
-  const setWosDoiQueryToggle = (button, enabled) => {
-    const icon = button.querySelector('i');
-    const label = button.querySelector('.button-label');
-    if (enabled) {
-      icon.className = 'fa-solid fa-toggle-on';
-      label.textContent = 'Disable DOI Batch Query';
-    } else {
-      icon.className = 'fa-solid fa-toggle-off';
-      label.textContent = 'Enable DOI Batch Query';
-    }
-  };
-
   const setDoiPdfDownloadToggle = (button, enabled) => {
     const icon = button.querySelector('i');
     const label = button.querySelector('.button-label');
@@ -250,7 +238,6 @@ import './popup.css';
     const lmStudioTestBtn = document.getElementById('lmStudioTestBtn');
     const lmStudioHint = document.getElementById('lmStudioHint');
 
-    const openWosDoiQueryBtn = document.getElementById('openWosDoiQueryBtn');
     const openDoiPdfDownloadBtn = document.getElementById('openDoiPdfDownloadBtn');
     const sidDisplay = null;
 
@@ -301,7 +288,6 @@ import './popup.css';
     });
 
     // 所有面板默认状态为未开启（false），不从本地存储读取
-    let isWosDoiQueryEnabled = false;
     let isDoiPdfDownloadEnabled = false;
     let currentEasyScholarApiKey = '';
     let currentEasyScholarVerified = false;
@@ -312,7 +298,6 @@ import './popup.css';
     let currentLmStudioVerified = false;
 
     // 初始化按钮状态为 Enable（未开启）
-    setWosDoiQueryToggle(openWosDoiQueryBtn, false);
     setDoiPdfDownloadToggle(openDoiPdfDownloadBtn, false);
 
     const updateApiKeyHint = (message, variant) => {
@@ -1433,43 +1418,6 @@ import './popup.css';
       });
     }
 
-
-    openWosDoiQueryBtn.addEventListener('click', () => {
-      isWosDoiQueryEnabled = !isWosDoiQueryEnabled;
-      setWosDoiQueryToggle(openWosDoiQueryBtn, isWosDoiQueryEnabled);
-
-      withActiveTab((tab) => {
-        if (!tab) {
-          setStatus(sidDisplay, 'No active tab detected', 'status--error');
-          return;
-        }
-        sendMessageToTabWithBootstrap(
-          tab.id,
-          { type: isWosDoiQueryEnabled ? 'OPEN_WOS_DOI_QUERY' : 'CLOSE_WOS_DOI_QUERY' },
-          (error, response) => {
-            if (error) {
-              setStatus(sidDisplay, 'Error: ' + error.message, 'status--error');
-              return;
-            }
-            if (response && response.success) {
-              setStatus(
-                sidDisplay,
-                isWosDoiQueryEnabled
-                  ? (response.toolbarShortcutsReady ? 'DOI batch query toolbar enabled' : 'DOI batch query enabled')
-                  : 'DOI batch query disabled',
-                'status--success'
-              );
-            } else {
-              setStatus(
-                sidDisplay,
-                response?.error || 'Failed to toggle DOI batch query',
-                'status--error'
-              );
-            }
-          }
-        );
-      });
-    });
 
     openDoiPdfDownloadBtn.addEventListener('click', () => {
       isDoiPdfDownloadEnabled = !isDoiPdfDownloadEnabled;

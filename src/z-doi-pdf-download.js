@@ -6,7 +6,10 @@
 const SO_temp = {
     "MOSM/MS": "/doi/pdf/{doi}?download=true",
     "POMS/JOM": "/doi/pdfdirect/{doi}?download=true",
-    "JMMD": "/doi/epdf/{doi}?needAccess=true"
+    "JMMD": "/doi/epdf/{doi}?needAccess=true",
+    "Wiley": "/doi/pdfdirect/{doi}?download=true",
+    "SAGE": "/doi/pdf/{doi}?download=true",
+    "Springer": "/content/pdf/{doi}.pdf"
 };
 
 
@@ -25,6 +28,7 @@ const SO_temp = {
 
     // ---- localStorage 读取默认模板 ----
     const TEMPLATE_KEY = "pdf_download_template";
+    const TEMPLATE_SELECTION_KEY = "pdf_download_template_selection";
     const LEGACY_TIMER_KEY = "pdf_download_timer";
     const LEGACY_BATCH_MIN_KEY = "pdf_download_batch_minutes";
     const DOWNLOAD_DELAY_SECONDS_KEY = "pdf_download_delay_seconds";
@@ -138,6 +142,7 @@ const SO_temp = {
 
     const defaultTemplate = "/doi/pdf/{doi}?download=true";
     const savedTemplate = readStorage(TEMPLATE_KEY, defaultTemplate);
+    const savedTemplateSelection = readStorage(TEMPLATE_SELECTION_KEY, "");
     const savedDownloadDelaySeconds = readSecondsSetting(
         DOWNLOAD_DELAY_SECONDS_KEY,
         LEGACY_TIMER_KEY,
@@ -314,7 +319,8 @@ const SO_temp = {
     // 添加 SO_temp 中的选项
     for (const [key, value] of Object.entries(SO_temp)) {
         const opt = document.createElement("option");
-        opt.value = value;
+        opt.value = key;
+        opt.dataset.template = value;
         opt.textContent = key;
         templateSelect.appendChild(opt);
     }
@@ -341,45 +347,41 @@ const SO_temp = {
 
     // 下拉菜单变化事件
     templateSelect.addEventListener("change", () => {
-        const selectedValue = templateSelect.value;
-        if (selectedValue !== "custom") {
-            templateInput.value = selectedValue;
-            localStorage.setItem(TEMPLATE_KEY, selectedValue);
-            console.log("Template updated from dropdown:", selectedValue);
+        const selectedKey = templateSelect.value;
+        writeStorage(TEMPLATE_SELECTION_KEY, selectedKey);
+        if (selectedKey !== "custom") {
+            const selectedTemplate = SO_temp[selectedKey];
+            templateInput.value = selectedTemplate;
+            writeStorage(TEMPLATE_KEY, selectedTemplate);
+            console.log("Template updated from dropdown:", selectedKey, selectedTemplate);
         }
     });
 
     // 输入框变化事件
     templateInput.addEventListener("change", () => {
-        localStorage.setItem(TEMPLATE_KEY, templateInput.value);
+        writeStorage(TEMPLATE_KEY, templateInput.value);
         console.log("had saved URL template：", templateInput.value);
 
         // 检查输入值是否匹配 SO_temp 中的某个模板
-        let matchFound = false;
-        for (const [key, value] of Object.entries(SO_temp)) {
-            if (templateInput.value === value) {
-                templateSelect.value = value;
-                matchFound = true;
-                break;
-            }
+        const currentKey = templateSelect.value;
+        if (currentKey !== "custom" && SO_temp[currentKey] === templateInput.value) {
+            writeStorage(TEMPLATE_SELECTION_KEY, currentKey);
+            return;
         }
-        if (!matchFound) {
-            templateSelect.value = "custom";
-        }
+        const matchingEntry = Object.entries(SO_temp).find(([, value]) => templateInput.value === value);
+        templateSelect.value = matchingEntry?.[0] || "custom";
+        writeStorage(TEMPLATE_SELECTION_KEY, templateSelect.value);
     });
 
     // 初始化下拉菜单选中状态
-    let initialMatch = false;
-    for (const [key, value] of Object.entries(SO_temp)) {
-        if (savedTemplate === value) {
-            templateSelect.value = value;
-            initialMatch = true;
-            break;
-        }
-    }
-    if (!initialMatch) {
-        templateSelect.value = "custom";
-    }
+    const savedSelectionIsValid = savedTemplateSelection !== "custom"
+        && Object.prototype.hasOwnProperty.call(SO_temp, savedTemplateSelection)
+        && SO_temp[savedTemplateSelection] === savedTemplate;
+    const initialMatchingEntry = Object.entries(SO_temp).find(([, value]) => savedTemplate === value);
+    templateSelect.value = savedSelectionIsValid
+        ? savedTemplateSelection
+        : (savedTemplateSelection === "custom" ? "custom" : initialMatchingEntry?.[0] || "custom");
+    writeStorage(TEMPLATE_SELECTION_KEY, templateSelect.value);
     // ---- 下载延迟 + 批次大小 + 批次间隔 输入框（同行） ----
     const timeRow = document.createElement("div");
     timeRow.style.display = "grid";
@@ -556,6 +558,42 @@ const SO_temp = {
     toolsRow.style.boxSizing = "border-box";
     contentContainer.appendChild(toolsRow);
 
+    const localFilePicker = document.createElement("div");
+    localFilePicker.style.position = "relative";
+    localFilePicker.style.height = "38px";
+    localFilePicker.style.flex = "1";
+    localFilePicker.style.minWidth = "0";
+    toolsRow.appendChild(localFilePicker);
+
+    const readLocalFilesBtn = document.createElement("button");
+    readLocalFilesBtn.type = "button";
+    readLocalFilesBtn.textContent = "Read Local Files";
+    readLocalFilesBtn.style.height = "38px";
+    readLocalFilesBtn.style.width = "100%";
+    readLocalFilesBtn.style.cursor = "pointer";
+    readLocalFilesBtn.style.fontSize = "12px";
+    readLocalFilesBtn.style.padding = "0 10px";
+    readLocalFilesBtn.style.whiteSpace = "nowrap";
+    readLocalFilesBtn.style.pointerEvents = "none";
+    applyButtonStyle(readLocalFilesBtn);
+    localFilePicker.appendChild(readLocalFilesBtn);
+
+    // 让第一次真实点击直接落到原生 file input，避免页面脚本拦截间接的 input.click()。
+    const localFileInput = document.createElement("input");
+    localFileInput.type = "file";
+    localFileInput.multiple = true;
+    localFileInput.accept = ".txt,.csv,.ris,.bib,.bibtex,.json,.xml,.enw,.nbib,text/*,application/json,application/xml";
+    localFileInput.title = "Read local files and extract DOI";
+    localFileInput.setAttribute("aria-label", "Read local files and extract DOI");
+    localFileInput.style.position = "absolute";
+    localFileInput.style.inset = "0";
+    localFileInput.style.width = "100%";
+    localFileInput.style.height = "100%";
+    localFileInput.style.opacity = "0";
+    localFileInput.style.cursor = "pointer";
+    localFileInput.style.zIndex = "1";
+    localFilePicker.appendChild(localFileInput);
+
     // ---- 同步本地已下载 PDF 的 DOI ----
     const syncBtn = document.createElement("button");
     syncBtn.textContent = "Sync PDFs in Folder";
@@ -713,7 +751,7 @@ const SO_temp = {
         return dois;
     }
 
-    async function extractDoisFromFiles(files) {
+    async function extractDoisFromFiles(files, source = "selected") {
         const fileList = Array.from(files || []);
         if (fileList.length === 0) return;
 
@@ -731,13 +769,13 @@ const SO_temp = {
         // 复用已有正则提取实现，不在文件拖放流程中重复定义 DOI 规则。
         const dois = extractFromText(contents.join("\n"));
         if (dois.length === 0) {
-            log(`No DOI found in ${fileList.length} dropped file${fileList.length === 1 ? "" : "s"}`);
+            log(`No DOI found in ${fileList.length} ${source} file${fileList.length === 1 ? "" : "s"}`);
             return;
         }
 
         textarea.value = dois.join("\n");
         const failedSuffix = failedCount > 0 ? `; ${failedCount} file(s) could not be read` : "";
-        log(`Extracted ${dois.length} DOIs from ${fileList.length - failedCount} dropped file(s)${failedSuffix}`);
+        log(`Extracted ${dois.length} DOIs from ${fileList.length - failedCount} ${source} file(s)${failedSuffix}`);
     }
 
     const dragContainsFiles = (event) => Array.from(event.dataTransfer?.types || []).includes("Files");
@@ -768,7 +806,7 @@ const SO_temp = {
         event.preventDefault();
         fileDragDepth = 0;
         dropOverlay.style.display = "none";
-        void extractDoisFromFiles(event.dataTransfer.files);
+        void extractDoisFromFiles(event.dataTransfer.files, "dropped");
     });
 
     let downloadedDois = [];
@@ -984,6 +1022,10 @@ const SO_temp = {
 
     syncBtn.onclick = syncFromFolder;
     extractBtn.onclick = extractDois;
+    localFileInput.onchange = () => {
+        void extractDoisFromFiles(localFileInput.files, "selected");
+        localFileInput.value = "";
+    };
     btn.onclick = download_batch;
 
     selectDownloadDirBtn.onclick = async () => {
