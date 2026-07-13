@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.5 - 2026-07-13
+
+### Fixed
+- Made PDF folder synchronization backfill non-empty download timestamps and canonical DOI source URLs for existing files, keeping generated version 1 indexes compatible with NetVault.
+- Made a subsequent folder synchronization repair legacy index records whose `downloadedAt` or `sourceUrl` value is missing or null.
+
 ## 0.1.4 - 2026-07-13
 
 ### Added

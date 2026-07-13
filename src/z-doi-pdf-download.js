@@ -12,6 +12,8 @@ const SO_temp = {
     "Springer": "/content/pdf/{doi}.pdf"
 };
 
+const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
+
 
 /**
  * PDF 批量下载工具
@@ -928,6 +930,7 @@ const SO_temp = {
         const previousByFileName = new Map(index.records.map(record => [record.filename, record]));
         const records = [];
         const invalidFiles = [];
+        const synchronizedAt = new Date().toISOString();
 
         for await (const entry of dirHandle.values()) {
             if (entry.kind !== "file" || !entry.name.toLowerCase().endsWith(".pdf")) continue;
@@ -943,14 +946,21 @@ const SO_temp = {
                 invalidFiles.push({ filename: entry.name, reason: validation.reason });
                 continue;
             }
+            const doi = previous?.doi || doiFromPdfFileName(entry.name);
+            const provenance = buildSynchronizedPdfProvenance({
+                previous,
+                doi,
+                lastModified: file.lastModified,
+                synchronizedAt
+            });
             records.push({
-                doi: previous?.doi || doiFromPdfFileName(entry.name),
+                doi,
                 filename: entry.name,
                 size: file.size,
                 lastModified: file.lastModified,
                 sha256: unchanged ? previous.sha256 : await sha256Hex(file),
-                downloadedAt: previous?.downloadedAt || null,
-                sourceUrl: previous?.sourceUrl || null,
+                downloadedAt: provenance.downloadedAt,
+                sourceUrl: provenance.sourceUrl,
                 validation
             });
         }
