@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.1.4 - 2026-07-13
+
+### Added
+- Added a synchronized `pdf-download-index.json` companion index with DOI, filename, size, modification time, SHA-256 hash, download time, source URL, and validation metadata.
+- Added fast PDF validation before saving downloads, including HTTP status, response type, PDF header, minimum size, and end-marker checks.
+- Added incremental PDF validation during folder synchronization; unchanged valid files reuse their existing hashes and validation results.
+
+### Changed
+- Widened the PDF Batch Downloader and added consistently aligned Font Awesome icons with shorter, single-line button labels.
+- Changed delay inputs to locale-independent decimal text fields so values such as `0.1` seconds are accepted reliably.
+- Updated PDF filenames to replace every DOI path separator while retaining the exact DOI in the JSON index.
+- Made folder synchronization treat the directory as authoritative, removing missing or invalid PDFs from the JSON index without deleting physical files.
+
+### Fixed
+- Prevented HTML pages, JSON error responses, truncated files, and other obviously invalid PDF downloads from being saved or indexed.
+- Preserved DOI suffix underscores when inferring a DOI from an existing PDF filename.
+- Removed duplicate DOI values during text extraction.
+
 ## 0.1.3 - 2026-07-13
 
 ### Added

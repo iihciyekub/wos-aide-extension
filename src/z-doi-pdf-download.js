@@ -34,6 +34,7 @@ const SO_temp = {
     const DOWNLOAD_DELAY_SECONDS_KEY = "pdf_download_delay_seconds";
     const BATCH_INTERVAL_SECONDS_KEY = "pdf_download_batch_interval_seconds";
     const BATCH_SIZE_KEY = "pdf_download_batch_size";
+    const PDF_INDEX_FILE_NAME = "pdf-download-index.json";
     const POS_TOP_KEY = "pdf_download_panel_top";
     const POS_LEFT_KEY = "pdf_download_panel_left";
     
@@ -158,6 +159,8 @@ const SO_temp = {
     const savedBatchSize = readStorage(BATCH_SIZE_KEY, "50");
     const savedTop = readStorage(POS_TOP_KEY, "120px");
     const savedLeft = readStorage(POS_LEFT_KEY, null);
+    const PANEL_WIDTH = 480;
+    const PANEL_MARGIN = 8;
 
 
     // ==============================
@@ -170,8 +173,8 @@ const SO_temp = {
         top: savedTop,
         left: savedLeft,
         defaultTop: 120,
-        defaultLeft: window.innerWidth - 438,
-        width: 420,
+        defaultLeft: window.innerWidth - PANEL_WIDTH - PANEL_MARGIN,
+        width: PANEL_WIDTH,
         height: 360,
         margin: 8
     });
@@ -179,7 +182,7 @@ const SO_temp = {
     box.style.left = `${Math.round(left)}px`;
     box.style.right = "auto";
     box.style.transform = "none";
-    box.style.width = "420px";
+    box.style.width = `${PANEL_WIDTH}px`;
     box.style.zIndex = 999999;
     box.style.background = "#ffffff";
     box.style.padding = "0";
@@ -301,6 +304,31 @@ const SO_temp = {
         });
     };
 
+    const setIconButtonContent = (button, iconClass, label) => {
+        const icon = document.createElement("i");
+        icon.className = `fa-solid ${iconClass}`;
+        icon.setAttribute("aria-hidden", "true");
+        icon.style.flexShrink = "0";
+        icon.style.width = "14px";
+        icon.style.textAlign = "center";
+
+        const text = document.createElement("span");
+        text.textContent = label;
+        text.style.minWidth = "0";
+        text.style.overflow = "hidden";
+        text.style.textOverflow = "ellipsis";
+        text.style.whiteSpace = "nowrap";
+
+        button.replaceChildren(icon, text);
+        button.style.display = "inline-flex";
+        button.style.alignItems = "center";
+        button.style.justifyContent = "center";
+        button.style.gap = "6px";
+        button.style.whiteSpace = "nowrap";
+        button.setAttribute("aria-label", label);
+        button.title = label;
+    };
+
     // ---- SO_temp 下拉菜单 ----
     const templateSelect = document.createElement("select");
     applyInputBaseStyle(templateSelect);
@@ -407,9 +435,10 @@ const SO_temp = {
     timerWrap.appendChild(timerlable);
 
     const timerInput = document.createElement("input");
-    timerInput.type = "number";
-    timerInput.min = "0";
-    timerInput.step = "0.1";
+    // Use text instead of number so host-page/locale rules do not strip the dot in `0.1`.
+    timerInput.type = "text";
+    timerInput.inputMode = "decimal";
+    timerInput.pattern = "[0-9]+([.][0-9]+)?";
     timerInput.value = savedDownloadDelaySeconds;
     applyInputBaseStyle(timerInput);
     timerInput.style.width = "100%";
@@ -475,9 +504,9 @@ const SO_temp = {
     batchWrap.appendChild(batchLabel);
 
     const batchInput = document.createElement("input");
-    batchInput.type = "number";
-    batchInput.min = "0";
-    batchInput.step = "0.1";
+    batchInput.type = "text";
+    batchInput.inputMode = "decimal";
+    batchInput.pattern = "[0-9]+([.][0-9]+)?";
     batchInput.value = savedBatchIntervalSeconds;
     applyInputBaseStyle(batchInput);
     batchInput.style.width = "100%";
@@ -525,7 +554,11 @@ const SO_temp = {
 
     // ---- 下载目录选择按钮（独立一行） ----
     const selectDownloadDirBtn = document.createElement("button");
-    selectDownloadDirBtn.textContent = downloadDirName ? `Download Folder: ${downloadDirName}` : "Choose Download Folder";
+    const updateDownloadDirButton = () => {
+        const label = downloadDirName ? `Folder: ${downloadDirName}` : "Choose Folder";
+        setIconButtonContent(selectDownloadDirBtn, "fa-folder-open", label);
+    };
+    updateDownloadDirButton();
     selectDownloadDirBtn.style.height = "38px";
     selectDownloadDirBtn.style.width = "100%";
     selectDownloadDirBtn.style.border = "1px solid #d4d4d8";
@@ -567,7 +600,7 @@ const SO_temp = {
 
     const readLocalFilesBtn = document.createElement("button");
     readLocalFilesBtn.type = "button";
-    readLocalFilesBtn.textContent = "Read Local Files";
+    setIconButtonContent(readLocalFilesBtn, "fa-file-arrow-up", "Load DOI File");
     readLocalFilesBtn.style.height = "38px";
     readLocalFilesBtn.style.width = "100%";
     readLocalFilesBtn.style.cursor = "pointer";
@@ -596,7 +629,7 @@ const SO_temp = {
 
     // ---- 同步本地已下载 PDF 的 DOI ----
     const syncBtn = document.createElement("button");
-    syncBtn.textContent = "Sync PDFs in Folder";
+    setIconButtonContent(syncBtn, "fa-rotate", "Sync PDFs");
     syncBtn.style.height = "38px";
     syncBtn.style.flex = "1";
     syncBtn.style.border = "1px solid #d4d4d8";
@@ -614,12 +647,14 @@ const SO_temp = {
     syncBtn.style.alignItems = "center";
     syncBtn.style.justifyContent = "center";
     syncBtn.style.fontFamily = "inherit";
+    syncBtn.style.whiteSpace = "nowrap";
+    syncBtn.style.minWidth = "0";
     applyButtonStyle(syncBtn);
     toolsRow.appendChild(syncBtn);
 
     // ---- 从文本提取 DOI ----
     const extractBtn = document.createElement("button");
-    extractBtn.textContent = "Extract from Text";
+    setIconButtonContent(extractBtn, "fa-wand-magic-sparkles", "Extract DOIs");
     extractBtn.style.height = "38px";
     extractBtn.style.flex = "1";
     extractBtn.style.border = "1px solid #d4d4d8";
@@ -637,13 +672,15 @@ const SO_temp = {
     extractBtn.style.alignItems = "center";
     extractBtn.style.justifyContent = "center";
     extractBtn.style.fontFamily = "inherit";
+    extractBtn.style.whiteSpace = "nowrap";
+    extractBtn.style.minWidth = "0";
     applyButtonStyle(extractBtn);
     toolsRow.appendChild(extractBtn);
 
 
     // ---- 下载按钮 ----
     const btn = document.createElement("button");
-    btn.textContent = "Download";
+    setIconButtonContent(btn, "fa-download", "Download");
     btn.style.height = "40px";
     btn.style.width = "100%";
     btn.style.border = "1px solid #18181b";
@@ -734,6 +771,7 @@ const SO_temp = {
     // 提取函数：从文本中提取 DOI（按出现顺序）
     function extractFromText(text) {
         const dois = [];
+        const seenDois = new Set();
         let remainingText = text || "";
         let match;
 
@@ -745,7 +783,10 @@ const SO_temp = {
                 doi = decodeURIComponent(doi);
             } catch (e) { /* ignore decode errors */ }
             doi = doi.trim().toLowerCase();
-            if (doi) dois.push(doi);
+            if (doi && !seenDois.has(doi)) {
+                seenDois.add(doi);
+                dois.push(doi);
+            }
         }
 
         return dois;
@@ -811,6 +852,132 @@ const SO_temp = {
 
     let downloadedDois = [];
 
+    const doiFromPdfFileName = (fileName) => {
+        const name = fileName.replace(/\.pdf$/i, "");
+        const separatorIndex = name.indexOf("_");
+        return separatorIndex < 0
+            ? name
+            : `${name.slice(0, separatorIndex)}/${name.slice(separatorIndex + 1)}`;
+    };
+
+    const sha256Hex = async (blob) => {
+        const buffer = await blob.arrayBuffer();
+        const digest = await crypto.subtle.digest("SHA-256", buffer);
+        return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+    };
+
+    const validatePdfBlob = async (blob, contentType = "") => {
+        const checkedAt = new Date().toISOString();
+        const invalid = (reason) => ({ status: "invalid", checkedAt, method: "pdf-signature-eof", reason });
+        const normalizedType = String(contentType).toLowerCase();
+
+        if (normalizedType.includes("text/html") || normalizedType.includes("application/json")) {
+            return invalid(`Unexpected response type: ${contentType}`);
+        }
+        if (blob.size < 512) {
+            return invalid(`File is too small (${blob.size} bytes)`);
+        }
+
+        const decoder = new TextDecoder("latin1");
+        const head = decoder.decode(await blob.slice(0, Math.min(blob.size, 1024)).arrayBuffer());
+        if (!head.includes("%PDF-")) {
+            const trimmedHead = head.trimStart().slice(0, 32).toLowerCase();
+            const detail = trimmedHead.startsWith("<!doctype") || trimmedHead.startsWith("<html")
+                ? "HTML page received instead of PDF"
+                : "Missing PDF header";
+            return invalid(detail);
+        }
+
+        const tailStart = Math.max(0, blob.size - 65536);
+        const tail = decoder.decode(await blob.slice(tailStart).arrayBuffer());
+        if (!tail.includes("%%EOF")) {
+            return invalid("Missing PDF end marker; file may be incomplete");
+        }
+
+        return { status: "valid", checkedAt, method: "pdf-signature-eof", reason: null };
+    };
+
+    const readPdfIndex = async (dirHandle) => {
+        try {
+            const handle = await dirHandle.getFileHandle(PDF_INDEX_FILE_NAME);
+            const file = await handle.getFile();
+            const parsed = JSON.parse(await file.text());
+            return parsed && Array.isArray(parsed.records) ? parsed : { version: 1, records: [] };
+        } catch (error) {
+            if (error?.name !== "NotFoundError") {
+                console.warn("[DOI PDF Download] Could not read PDF index:", error);
+            }
+            return { version: 1, records: [] };
+        }
+    };
+
+    const writePdfIndex = async (dirHandle, records) => {
+        const handle = await dirHandle.getFileHandle(PDF_INDEX_FILE_NAME, { create: true });
+        const writable = await handle.createWritable();
+        await writable.write(JSON.stringify({
+            version: 1,
+            updatedAt: new Date().toISOString(),
+            algorithm: "SHA-256",
+            records: records.slice().sort((a, b) => a.filename.localeCompare(b.filename))
+        }, null, 2));
+        await writable.close();
+    };
+
+    const synchronizePdfIndex = async (dirHandle) => {
+        const index = await readPdfIndex(dirHandle);
+        const previousByFileName = new Map(index.records.map(record => [record.filename, record]));
+        const records = [];
+        const invalidFiles = [];
+
+        for await (const entry of dirHandle.values()) {
+            if (entry.kind !== "file" || !entry.name.toLowerCase().endsWith(".pdf")) continue;
+            const file = await entry.getFile();
+            const previous = previousByFileName.get(entry.name);
+            const unchanged = previous
+                && previous.size === file.size
+                && previous.lastModified === file.lastModified
+                && previous.sha256;
+            const canReuseValidation = unchanged && previous.validation?.status === "valid";
+            const validation = canReuseValidation ? previous.validation : await validatePdfBlob(file, file.type);
+            if (validation.status !== "valid") {
+                invalidFiles.push({ filename: entry.name, reason: validation.reason });
+                continue;
+            }
+            records.push({
+                doi: previous?.doi || doiFromPdfFileName(entry.name),
+                filename: entry.name,
+                size: file.size,
+                lastModified: file.lastModified,
+                sha256: unchanged ? previous.sha256 : await sha256Hex(file),
+                downloadedAt: previous?.downloadedAt || null,
+                sourceUrl: previous?.sourceUrl || null,
+                validation
+            });
+        }
+
+        await writePdfIndex(dirHandle, records);
+        return { records, invalidFiles };
+    };
+
+    const recordDownloadedPdf = async (dirHandle, fileName, doi, sourceUrl, blob, validation) => {
+        const index = await readPdfIndex(dirHandle);
+        const fileHandle = await dirHandle.getFileHandle(fileName);
+        const file = await fileHandle.getFile();
+        const record = {
+            doi,
+            filename: fileName,
+            size: file.size,
+            lastModified: file.lastModified,
+            sha256: await sha256Hex(blob),
+            downloadedAt: new Date().toISOString(),
+            sourceUrl,
+            validation
+        };
+        const records = index.records.filter(item => item.filename !== fileName);
+        records.push(record);
+        await writePdfIndex(dirHandle, records);
+    };
+
     function formatCountdown(ms) {
         if (ms < 60000) {
             const seconds = ms / 1000;
@@ -850,7 +1017,7 @@ const SO_temp = {
                 if (dirHandle) {
                     downloadDirHandle = dirHandle;
                     downloadDirName = dirHandle.name || '';
-                    selectDownloadDirBtn.textContent = downloadDirName ? `Download Folder: ${downloadDirName}` : "Choose Download Folder";
+                    updateDownloadDirButton();
                     window.wosAideDirectoryHandle = dirHandle;
                 }
             }
@@ -871,16 +1038,14 @@ const SO_temp = {
                     return;
                 }
             }
-            const dois = [];
-            for await (const entry of dirHandle.values()) {
-                if (entry.kind !== "file") continue;
-                if (!entry.name.toLowerCase().endsWith(".pdf")) continue;
-                const nameWithoutExt = entry.name.replace(/\.pdf$/i, "");
-                dois.push(nameWithoutExt.replace(/_/g, "/"));
-            }
+            const { records, invalidFiles } = await synchronizePdfIndex(dirHandle);
+            invalidFiles.forEach(({ filename, reason }) => {
+                log(`Invalid PDF excluded: ${filename} (${reason})`);
+            });
+            const dois = records.map(record => record.doi).filter(Boolean);
             downloadedDois = Array.from(new Set(dois));
             if (downloadedDois.length === 0) {
-                log("No PDF files found in the selected folder");
+                log("No valid PDF files found in the selected folder");
                 return;
             }
             const inputDois = parseDoiList(textarea.value);
@@ -921,7 +1086,7 @@ const SO_temp = {
             if (dirHandle) {
                 downloadDirHandle = dirHandle;
                 downloadDirName = dirHandle.name || '';
-                selectDownloadDirBtn.textContent = downloadDirName ? `Download Folder: ${downloadDirName}` : "Choose Download Folder";
+                updateDownloadDirButton();
                 window.wosAideDirectoryHandle = dirHandle;
             }
         }
@@ -948,13 +1113,25 @@ const SO_temp = {
     async function download_pdf(doi, template) {
         const url = template.replace("{doi}", doi);
         const res = await fetch(url);
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status} ${res.statusText}`.trim());
+        }
         const blob = await res.blob();
+        const validation = await validatePdfBlob(blob, res.headers.get("content-type") || blob.type);
+        if (validation.status !== "valid") {
+            throw new Error(validation.reason);
+        }
 
-        const fileName = doi.replace("/", "_") + ".pdf";
+        const fileName = doi.replace(/\//g, "_") + ".pdf";
         const dirHandle = await getWritableDirectoryHandle();
         if (dirHandle) {
             const saved = await writeBlobToDirectory(dirHandle, fileName, blob);
             if (saved) {
+                try {
+                    await recordDownloadedPdf(dirHandle, fileName, doi, url, blob, validation);
+                } catch (error) {
+                    console.warn("[DOI PDF Download] PDF saved, but index update failed:", error);
+                }
                 return;
             }
         }
@@ -981,12 +1158,12 @@ const SO_temp = {
         const downloadDelaySeconds = timerInput.value.trim() === "" ? NaN : Number(timerInput.value);
         const batchIntervalSeconds = batchInput.value.trim() === "" ? NaN : Number(batchInput.value);
         const parsedBatchSize = batchSizeInput.value.trim() === "" ? NaN : Math.floor(Number(batchSizeInput.value));
-        const perDownloadDelay = (Number.isFinite(downloadDelaySeconds) && downloadDelaySeconds >= 0
+        const perDownloadDelay = Math.round((Number.isFinite(downloadDelaySeconds) && downloadDelaySeconds >= 0
             ? downloadDelaySeconds
-            : 10) * 1000;
-        const batchCooldown = (Number.isFinite(batchIntervalSeconds) && batchIntervalSeconds >= 0
+            : 10) * 1000);
+        const batchCooldown = Math.round((Number.isFinite(batchIntervalSeconds) && batchIntervalSeconds >= 0
             ? batchIntervalSeconds
-            : 2100) * 1000;
+            : 2100) * 1000);
         const batchSize = Number.isFinite(parsedBatchSize) && parsedBatchSize >= 1 ? parsedBatchSize : 50;
 
         timerInput.value = String(perDownloadDelay / 1000);
@@ -1003,7 +1180,7 @@ const SO_temp = {
                 await download_pdf(doi, template);
                 log(` ${doi}  (${i + 1}/${lines.length})`);
             } catch (err) {
-                log(`Failed: ${doi}`);
+                log(`Failed: ${doi} (${err?.message || err})`);
             }
             const isLast = i === lines.length - 1;
             const completedBatch = (i + 1) % batchSize === 0;
@@ -1031,7 +1208,7 @@ const SO_temp = {
     selectDownloadDirBtn.onclick = async () => {
         try {
             await chooseDownloadDirectory();
-            selectDownloadDirBtn.textContent = downloadDirName ? `Download Folder: ${downloadDirName}` : "Choose Download Folder";
+            updateDownloadDirButton();
         } catch (error) {
             if (error && (error.name === 'AbortError' || error.message === 'The user aborted a request.')) {
                 return;
@@ -1044,20 +1221,20 @@ const SO_temp = {
         if (!handle) return;
         downloadDirHandle = handle;
         downloadDirName = handle.name || '';
-        selectDownloadDirBtn.textContent = downloadDirName ? `Download Folder: ${downloadDirName}` : "Choose Download Folder";
+        updateDownloadDirButton();
         window.wosAideDirectoryHandle = handle;
     });
 
     // 拖动和销毁
     let dragger = null;
     const ensurePanelInView = () => {
-        const width = box.offsetWidth || 420;
+        const width = box.offsetWidth || PANEL_WIDTH;
         const height = box.offsetHeight || 360;
         const clamped = window.clampPanelPosition({
             top: box.style.top || savedTop,
-            left: box.style.left || savedLeft || `${window.innerWidth - 438}px`,
+            left: box.style.left || savedLeft || `${window.innerWidth - PANEL_WIDTH - PANEL_MARGIN}px`,
             defaultTop: 120,
-            defaultLeft: window.innerWidth - 438,
+            defaultLeft: window.innerWidth - PANEL_WIDTH - PANEL_MARGIN,
             width,
             height,
             margin: 8

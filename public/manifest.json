@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "WOS Aide",
   "$schema": "https://json.schemastore.org/chrome-manifest.json",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "WOS Aide Chrome Extension",
   "icons": {
     "16": "icons/icon_16.png",
