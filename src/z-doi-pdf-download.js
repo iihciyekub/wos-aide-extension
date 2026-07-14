@@ -528,7 +528,7 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
     // ---- 多行 DOI 输入框 ----
     const label2 = document.createElement("div");
     label2.style.fontSize = "12px";
-    label2.textContent = "DOI list · one per line";
+    label2.textContent = "DOI list · 0";
     label2.style.width = "100%";
     label2.style.color = "#52525b";
     label2.style.fontWeight = "500";
@@ -680,11 +680,17 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
     toolsRow.appendChild(extractBtn);
 
 
-    // ---- 下载按钮 ----
+    // ---- 下载 / 停止按钮 ----
+    const downloadActions = document.createElement("div");
+    downloadActions.style.display = "flex";
+    downloadActions.style.gap = "10px";
+    downloadActions.style.width = "100%";
+    contentContainer.appendChild(downloadActions);
+
     const btn = document.createElement("button");
     setIconButtonContent(btn, "fa-download", "Download");
     btn.style.height = "40px";
-    btn.style.width = "100%";
+    btn.style.flex = "1";
     btn.style.border = "1px solid #18181b";
     btn.style.borderRadius = "6px";
     btn.style.cursor = "pointer";
@@ -701,7 +707,26 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
     btn.style.justifyContent = "center";
     btn.style.fontFamily = "inherit";
     applyButtonStyle(btn, true);
-    contentContainer.appendChild(btn);
+    downloadActions.appendChild(btn);
+
+    const stopBtn = document.createElement("button");
+    setIconButtonContent(stopBtn, "fa-stop", "Stop");
+    stopBtn.type = "button";
+    stopBtn.disabled = true;
+    stopBtn.style.height = "40px";
+    stopBtn.style.width = "104px";
+    stopBtn.style.flexShrink = "0";
+    stopBtn.style.border = "1px solid #dc2626";
+    stopBtn.style.borderRadius = "6px";
+    stopBtn.style.background = "#dc2626";
+    stopBtn.style.color = "#fff";
+    stopBtn.style.fontWeight = "600";
+    stopBtn.style.fontSize = "12px";
+    stopBtn.style.padding = "0 10px";
+    stopBtn.style.cursor = "not-allowed";
+    stopBtn.style.opacity = "0.45";
+    stopBtn.style.fontFamily = "inherit";
+    downloadActions.appendChild(stopBtn);
 
     // ---- 批次倒计时显示 ----
     const cooldownDiv = document.createElement("div");
@@ -770,6 +795,12 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
             .filter(Boolean);
     }
 
+    const updateDoiCount = () => {
+        label2.textContent = `DOI list · ${parseDoiList(textarea.value).length}`;
+    };
+    textarea.addEventListener("input", updateDoiCount);
+    updateDoiCount();
+
     // 提取函数：从文本中提取 DOI（按出现顺序）
     function extractFromText(text) {
         const dois = [];
@@ -817,6 +848,7 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
         }
 
         textarea.value = dois.join("\n");
+        updateDoiCount();
         const failedSuffix = failedCount > 0 ? `; ${failedCount} file(s) could not be read` : "";
         log(`Extracted ${dois.length} DOIs from ${fileList.length - failedCount} ${source} file(s)${failedSuffix}`);
     }
@@ -853,6 +885,32 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
     });
 
     let downloadedDois = [];
+    let activeDownloadController = null;
+
+    const setDownloadRunning = (running) => {
+        btn.disabled = running;
+        btn.style.cursor = running ? "not-allowed" : "pointer";
+        btn.style.opacity = running ? "0.6" : "1";
+        stopBtn.disabled = !running;
+        stopBtn.style.cursor = running ? "pointer" : "not-allowed";
+        stopBtn.style.opacity = running ? "1" : "0.45";
+    };
+
+    const waitForDelay = (ms, signal) => new Promise((resolve, reject) => {
+        if (signal.aborted) {
+            reject(new DOMException("Download stopped", "AbortError"));
+            return;
+        }
+        const timeoutId = setTimeout(() => {
+            signal.removeEventListener("abort", handleAbort);
+            resolve();
+        }, ms);
+        const handleAbort = () => {
+            clearTimeout(timeoutId);
+            reject(new DOMException("Download stopped", "AbortError"));
+        };
+        signal.addEventListener("abort", handleAbort, { once: true });
+    });
 
     const doiFromPdfFileName = (fileName) => {
         const name = fileName.replace(/\.pdf$/i, "");
@@ -999,7 +1057,7 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
         return `${pad(minutes)}:${pad(seconds)}`;
     }
 
-    async function runBatchCooldown(totalMs) {
+    async function runBatchCooldown(totalMs, signal) {
         let remaining = totalMs;
         const update = () => {
             cooldownDiv.textContent = remaining > 0
@@ -1009,7 +1067,7 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
         update();
         while (remaining > 0) {
             const tick = Math.min(1000, remaining);
-            await new Promise(res => setTimeout(res, tick));
+            await waitForDelay(tick, signal);
             remaining -= tick;
             if (remaining < 0) remaining = 0;
             update();
@@ -1055,13 +1113,15 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
             const dois = records.map(record => record.doi).filter(Boolean);
             downloadedDois = Array.from(new Set(dois));
             if (downloadedDois.length === 0) {
+                updateDoiCount();
                 log("No valid PDF files found in the selected folder");
                 return;
             }
             const inputDois = parseDoiList(textarea.value);
-            const downloadedSet = new Set(downloadedDois);
-            const remaining = inputDois.filter(doi => !downloadedSet.has(doi));
+            const downloadedSet = new Set(downloadedDois.map(doi => doi.toLowerCase()));
+            const remaining = inputDois.filter(doi => !downloadedSet.has(doi.toLowerCase()));
             textarea.value = remaining.join("\n");
+            updateDoiCount();
             log(`Loaded ${downloadedDois.length} downloaded DOIs, remaining ${remaining.length} in the list`);
         } catch (err) {
             if (err && (err.name === 'AbortError' || err.message === 'The user aborted a request.')) {
@@ -1083,6 +1143,7 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
             return;
         }
         textarea.value = dois.join("\n");
+        updateDoiCount();
         log(`Extracted ${dois.length} DOIs and updated the list`);
     }
 
@@ -1120,9 +1181,9 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
         }
     }
 
-    async function download_pdf(doi, template) {
+    async function download_pdf(doi, template, signal) {
         const url = template.replace("{doi}", doi);
-        const res = await fetch(url);
+        const res = await fetch(url, { signal });
         if (!res.ok) {
             throw new Error(`HTTP ${res.status} ${res.statusText}`.trim());
         }
@@ -1130,6 +1191,9 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
         const validation = await validatePdfBlob(blob, res.headers.get("content-type") || blob.type);
         if (validation.status !== "valid") {
             throw new Error(validation.reason);
+        }
+        if (signal.aborted) {
+            throw new DOMException("Download stopped", "AbortError");
         }
 
         const fileName = doi.replace(/\//g, "_") + ".pdf";
@@ -1157,6 +1221,7 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
     //  批量下载方法
     // ==============================
     async function download_batch() {
+        if (activeDownloadController) return;
         const template = templateInput.value.trim();
         const lines = parseDoiList(textarea.value);
 
@@ -1183,37 +1248,84 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
         writeStorage(BATCH_INTERVAL_SECONDS_KEY, batchInput.value);
         writeStorage(BATCH_SIZE_KEY, batchSizeInput.value);
         log(`Total ${lines.length} DOIs, start download...`);
+        activeDownloadController = new AbortController();
+        const { signal } = activeDownloadController;
+        setDownloadRunning(true);
+        let stopped = false;
 
-        for (let i = 0; i < lines.length; i++) {
-            const doi = lines[i];
-            try {
-                await download_pdf(doi, template);
-                log(` ${doi}  (${i + 1}/${lines.length})`);
-            } catch (err) {
-                log(`Failed: ${doi} (${err?.message || err})`);
+        try {
+            for (let i = 0; i < lines.length; i++) {
+                const doi = lines[i];
+                try {
+                    await download_pdf(doi, template, signal);
+                    log(` ${doi}  (${i + 1}/${lines.length})`);
+                } catch (err) {
+                    if (err?.name === "AbortError") {
+                        stopped = true;
+                        break;
+                    }
+                    log(`Failed: ${doi} (${err?.message || err})`);
+                }
+                const isLast = i === lines.length - 1;
+                const completedBatch = (i + 1) % batchSize === 0;
+                if (isLast) continue;
+                if (completedBatch) {
+                    log(`${batchSize} done. Next batch starts in ${batchCooldown / 1000} seconds...`);
+                    await runBatchCooldown(batchCooldown, signal);
+                } else {
+                    await waitForDelay(perDownloadDelay, signal);
+                }
             }
-            const isLast = i === lines.length - 1;
-            const completedBatch = (i + 1) % batchSize === 0;
-            if (isLast) {
-                continue;
-            }
-            if (completedBatch) {
-                log(`${batchSize} done. Next batch starts in ${batchCooldown / 1000} seconds...`);
-                await runBatchCooldown(batchCooldown);
-            } else {
-                await new Promise(res => setTimeout(res, perDownloadDelay));
-            }
+        } catch (err) {
+            if (err?.name === "AbortError") stopped = true;
+            else log(`Download interrupted: ${err?.message || err}`);
+        } finally {
+            activeDownloadController = null;
+            setDownloadRunning(false);
+            cooldownDiv.textContent = "";
         }
-        log("All done!");
+        log(stopped ? "Download stopped." : "All done!");
     }
 
-    syncBtn.onclick = syncFromFolder;
+    syncBtn.onclick = () => { void syncFromFolder(); };
     extractBtn.onclick = extractDois;
-    localFileInput.onchange = () => {
-        void extractDoisFromFiles(localFileInput.files, "selected");
+    let localFileDialogOpen = false;
+    let lastLocalFileDialogOpenAt = 0;
+    let localFileDialogSafetyTimer = null;
+    const resetLocalFileDialogState = () => {
+        localFileDialogOpen = false;
+        if (localFileDialogSafetyTimer) {
+            window.clearTimeout(localFileDialogSafetyTimer);
+            localFileDialogSafetyTimer = null;
+        }
+    };
+    localFileInput.addEventListener("click", (event) => {
+        const now = Date.now();
+        if (localFileDialogOpen || now - lastLocalFileDialogOpenAt < 800) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return;
+        }
+        localFileDialogOpen = true;
+        lastLocalFileDialogOpenAt = now;
+        localFileDialogSafetyTimer = window.setTimeout(resetLocalFileDialogState, 60000);
+        window.addEventListener("focus", () => {
+            window.setTimeout(resetLocalFileDialogState, 250);
+        }, { once: true });
+    });
+    localFileInput.addEventListener("cancel", resetLocalFileDialogState);
+    localFileInput.onchange = async () => {
+        const selectedFiles = Array.from(localFileInput.files || []);
+        resetLocalFileDialogState();
+        await extractDoisFromFiles(selectedFiles, "selected");
         localFileInput.value = "";
     };
     btn.onclick = download_batch;
+    stopBtn.onclick = () => {
+        if (!activeDownloadController) return;
+        log("Stopping download...");
+        activeDownloadController.abort();
+    };
 
     selectDownloadDirBtn.onclick = async () => {
         try {

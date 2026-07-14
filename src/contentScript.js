@@ -180,11 +180,13 @@ const WOS_DOI_QUERY_PANEL_MODE_EVENT = '__WOS_DOI_QUERY_PANEL_MODE__';
 const WOS_DOI_QUERY_PANEL_STATE_EVENT = '__WOS_DOI_QUERY_PANEL_STATE__';
 const GET_WOS_SID_INFO_REQUEST_EVENT = '__WOS_AIDE_GET_SID_INFO__';
 const GET_WOS_SID_INFO_RESPONSE_EVENT = '__WOS_AIDE_GET_SID_INFO_RESPONSE__';
+const WOS_SID_ICON_HTML = '<i class="fa-solid fa-circle-info wos-aide-toolbar-icon" aria-hidden="true"></i>';
 let isEasyScholarEnabledForToolbar = false;
 let isWosQueryEnabledForToolbar = false;
 let currentToolbarPanelMode = 'batch';
 let currentToolbarPanelTab = '';
 let fontAwesomeReadyPromise = null;
+let sidCopyFeedbackTimer = null;
 const isJournalQueryAvailableForToolbar = () => isEasyScholarEnabledForToolbar;
 
 const isWosQueryAvailableForToolbar = () => isWosQueryEnabledForToolbar;
@@ -219,7 +221,7 @@ const getWosToolbarShortcutDefinitions = () => {
     {
       id: 'sid-info',
       title: 'SID Info',
-      iconHtml: '<i class="fa-solid fa-circle-info wos-aide-toolbar-icon" aria-hidden="true"></i>',
+      iconHtml: WOS_SID_ICON_HTML,
       action: 'sid-info'
     }
   ];
@@ -371,8 +373,6 @@ const copyTextToClipboard = async (text) => {
 const copyWosSidFromToolbar = async (button) => {
   if (button.dataset.copying === 'true') return;
   button.dataset.copying = 'true';
-  const originalHtml = button.innerHTML;
-  const originalTitle = button.title;
   const { sid } = await getWosSidInfo();
   const copied = Boolean(sid) && await copyTextToClipboard(sid);
 
@@ -385,12 +385,20 @@ const copyWosSidFromToolbar = async (button) => {
   button.classList.toggle('is-copy-error', !copied);
   delete button.dataset.copying;
 
-  window.setTimeout(() => {
-    if (!button.isConnected) return;
-    button.innerHTML = originalHtml;
-    button.title = originalTitle;
-    button.setAttribute('aria-label', originalTitle);
-    button.classList.remove('is-copy-success', 'is-copy-error');
+  if (sidCopyFeedbackTimer) {
+    window.clearTimeout(sidCopyFeedbackTimer);
+  }
+  sidCopyFeedbackTimer = window.setTimeout(() => {
+    sidCopyFeedbackTimer = null;
+    const currentButton = button.isConnected
+      ? button
+      : document.querySelector('[data-wos-aide-shortcut="sid-info"]');
+    if (!currentButton) return;
+    currentButton.innerHTML = WOS_SID_ICON_HTML;
+    currentButton.title = 'SID Info';
+    currentButton.setAttribute('aria-label', 'SID Info');
+    currentButton.classList.remove('is-copy-success', 'is-copy-error');
+    delete currentButton.dataset.copying;
   }, 1200);
 };
 

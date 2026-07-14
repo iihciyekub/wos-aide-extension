@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.1.6 - 2026-07-14
+
+### Added
+- Added a Stop action that can cancel an active PDF batch download, including requests and cooldown waits.
+- Added a live unique DOI count above the PDF download list.
+
+### Changed
+- Made downloaded-DOI filtering case-insensitive when synchronizing the selected PDF folder.
+
+### Fixed
+- Prevented repeated local-file picker activation while a picker dialog is already open.
+- Made SID copy feedback reset reliably when the toolbar is recreated before its feedback timer completes.
+
 ## 0.1.5 - 2026-07-13
 
 ### Fixed
