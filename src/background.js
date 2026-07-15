@@ -365,6 +365,14 @@ async function readFileContent(fileHandle) {
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'GET_CURRENT_TAB_ID') {
+    sendResponse({
+      success: true,
+      tabId: sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null
+    });
+    return true;
+  }
+
   if (request.type === 'ENSURE_FONT_AWESOME') {
     (async () => {
       try {

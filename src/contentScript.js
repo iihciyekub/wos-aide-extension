@@ -166,6 +166,27 @@ const MODULES = {
 let isBridgeReady = false;
 let bridgePromise = null;
 const moduleInjectionPromises = new Map();
+const currentTabIdPromise = new Promise((resolve) => {
+  let settled = false;
+  const finish = (tabId = '') => {
+    if (settled) return;
+    settled = true;
+    window.clearTimeout(timeoutId);
+    resolve(tabId);
+  };
+  const timeoutId = window.setTimeout(() => finish(''), 1500);
+  try {
+    chrome.runtime.sendMessage({ type: 'GET_CURRENT_TAB_ID' }, response => {
+      if (chrome.runtime.lastError) {
+        finish('');
+        return;
+      }
+      finish(Number.isInteger(response?.tabId) ? String(response.tabId) : '');
+    });
+  } catch (_error) {
+    finish('');
+  }
+});
 
 const CHAT_API_KEY_STORAGE_KEY = 'wosOpenaiApiKey';
 const CHAT_MODEL_STORAGE_KEY = 'wosOpenaiChatModel';
@@ -628,7 +649,7 @@ const injectModule = (moduleId) => {
     return moduleInjectionPromises.get(moduleId);
   }
 
-  const injectionPromise = new Promise((resolve, reject) => {
+  const injectionPromise = currentTabIdPromise.then(tabId => new Promise((resolve, reject) => {
     const injectFile = (index) => {
       if (index >= module.files.length) {
         const element = document.getElementById(module.elementId);
@@ -644,6 +665,9 @@ const injectModule = (moduleId) => {
       const script = document.createElement('script');
       script.src = chrome.runtime.getURL(file);
       script.dataset.inject = module.injectMarker;
+      if (tabId) {
+        script.dataset.wosAideTabId = tabId;
+      }
       script.onload = function() {
         this.remove();
         injectFile(index + 1);
@@ -656,7 +680,7 @@ const injectModule = (moduleId) => {
     };
 
     injectFile(0);
-  }).finally(() => {
+  })).finally(() => {
     moduleInjectionPromises.delete(moduleId);
   });
 

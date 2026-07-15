@@ -5,14 +5,34 @@
 
 const SO_temp = {
     "MOSM/MS": "/doi/pdf/{doi}?download=true",
-    "POMS/JOM": "/doi/pdfdirect/{doi}?download=true",
-    "JMMD": "/doi/epdf/{doi}?needAccess=true",
     "Wiley": "/doi/pdfdirect/{doi}?download=true",
     "SAGE": "/doi/pdf/{doi}?download=true",
-    "Springer": "/content/pdf/{doi}.pdf"
+    "Springer": "/content/pdf/{doi}.pdf",
+    "tandfonline": "/doi/pdf/{doi}?needAccess=true"
 };
 
-const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
+const { buildSynchronizedPdfProvenance, deduplicatePdfRecordsBySha } = require("./pdf-index-record");
+const { createAdaptiveConcurrentRunner, normalizeConcurrency } = require("./download-worker-pool");
+const { directoryLockName, projectHandleKeyForTab, runWithWebLock } = require("./pdf-tab-directory");
+const { doiFromPdfFileName, pdfFileNameForDoi } = require("./pdf-file-name");
+
+const getFallbackTabContextId = () => {
+    const storageKey = "wos_aide_pdf_tab_context";
+    try {
+        let contextId = sessionStorage.getItem(storageKey);
+        if (!contextId) {
+            contextId = globalThis.crypto?.randomUUID?.()
+                || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            sessionStorage.setItem(storageKey, contextId);
+        }
+        return `session-${contextId}`;
+    } catch (_error) {
+        return `page-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+};
+
+const injectedTabContextId = document.currentScript?.dataset?.wosAideTabId || "";
+const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
 
 
 /**
@@ -36,7 +56,11 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
     const DOWNLOAD_DELAY_SECONDS_KEY = "pdf_download_delay_seconds";
     const BATCH_INTERVAL_SECONDS_KEY = "pdf_download_batch_interval_seconds";
     const BATCH_SIZE_KEY = "pdf_download_batch_size";
+    const DOWNLOAD_CONCURRENCY_KEY = "pdf_download_concurrency";
+    const MAX_DOWNLOAD_CONCURRENCY = 10;
     const PDF_INDEX_FILE_NAME = "pdf-download-index.json";
+    const PROJECT_HANDLE_STORAGE_KEY = projectHandleKeyForTab(pdfTabContextId);
+    const DIRECTORY_PICKER_ID = `wosAide-pdf-${pdfTabContextId.replace(/[^a-zA-Z0-9_-]/g, "").slice(-16)}`;
     const POS_TOP_KEY = "pdf_download_panel_top";
     const POS_LEFT_KEY = "pdf_download_panel_left";
     
@@ -91,7 +115,7 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
         await new Promise((resolve) => {
             const tx = db.transaction('projectHandles', 'readwrite');
             const store = tx.objectStore('projectHandles');
-            store.put(handle, 'default');
+            store.put(handle, PROJECT_HANDLE_STORAGE_KEY);
             tx.oncomplete = () => resolve();
             tx.onerror = () => resolve();
         });
@@ -103,7 +127,7 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
             return await new Promise((resolve) => {
                 const tx = db.transaction('projectHandles', 'readonly');
                 const store = tx.objectStore('projectHandles');
-                const req = store.get('default');
+                const req = store.get(PROJECT_HANDLE_STORAGE_KEY);
                 req.onsuccess = () => resolve(req.result || null);
                 req.onerror = () => resolve(null);
             });
@@ -128,7 +152,7 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
         if (!window.showDirectoryPicker) {
             throw new Error('Directory picker is not supported');
         }
-        const handle = await window.showDirectoryPicker({ id: 'wosAide-project', mode: 'readwrite' });
+        const handle = await window.showDirectoryPicker({ id: DIRECTORY_PICKER_ID, mode: 'readwrite' });
         const granted = await ensureDirectoryPermission(handle);
         if (!granted) {
             throw new Error('Write permission not granted');
@@ -159,6 +183,16 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
         60
     );
     const savedBatchSize = readStorage(BATCH_SIZE_KEY, "50");
+    const savedDownloadConcurrency = String(normalizeConcurrency(
+        readStorage(DOWNLOAD_CONCURRENCY_KEY, "1"),
+        MAX_DOWNLOAD_CONCURRENCY,
+        1
+    ));
+    let liveDownloadDelayMs = Math.round(Number(savedDownloadDelaySeconds) * 1000);
+    let liveBatchIntervalMs = Math.round(Number(savedBatchIntervalSeconds) * 1000);
+    let liveBatchSize = Math.max(1, Math.floor(Number(savedBatchSize)) || 50);
+    let liveDownloadConcurrency = Number(savedDownloadConcurrency);
+    let activeDownloadRuntime = null;
     const savedTop = readStorage(POS_TOP_KEY, "120px");
     const savedLeft = readStorage(POS_LEFT_KEY, null);
     const PANEL_WIDTH = 480;
@@ -390,7 +424,7 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
     // 输入框变化事件
     templateInput.addEventListener("change", () => {
         writeStorage(TEMPLATE_KEY, templateInput.value);
-        console.log("had saved URL template：", templateInput.value);
+        console.log("Saved URL template:", templateInput.value);
 
         // 检查输入值是否匹配 SO_temp 中的某个模板
         const currentKey = templateSelect.value;
@@ -412,10 +446,10 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
         ? savedTemplateSelection
         : (savedTemplateSelection === "custom" ? "custom" : initialMatchingEntry?.[0] || "custom");
     writeStorage(TEMPLATE_SELECTION_KEY, templateSelect.value);
-    // ---- 下载延迟 + 批次大小 + 批次间隔 输入框（同行） ----
+    // ---- 下载延迟 + 并发数 + 批次大小 + 批次间隔 ----
     const timeRow = document.createElement("div");
     timeRow.style.display = "grid";
-    timeRow.style.gridTemplateColumns = "minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1fr)";
+    timeRow.style.gridTemplateColumns = "repeat(2, minmax(0, 1fr))";
     timeRow.style.gap = "10px";
     timeRow.style.width = "100%";
     timeRow.style.alignItems = "end";
@@ -449,12 +483,65 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
     timerInput.style.padding = "0 10px";
     timerWrap.appendChild(timerInput);
 
-    timerInput.addEventListener("change", () => {
+    const updateDownloadDelay = (normalizeInput = false) => {
         const seconds = timerInput.value.trim() === "" ? NaN : Number(timerInput.value);
-        timerInput.value = Number.isFinite(seconds) && seconds >= 0 ? String(seconds) : "10";
-        writeStorage(DOWNLOAD_DELAY_SECONDS_KEY, timerInput.value);
-        console.log("Saved download delay (seconds):", timerInput.value);
-    });
+        if (Number.isFinite(seconds) && seconds >= 0) {
+            liveDownloadDelayMs = Math.round(seconds * 1000);
+            writeStorage(DOWNLOAD_DELAY_SECONDS_KEY, String(liveDownloadDelayMs / 1000));
+            if (normalizeInput) timerInput.value = String(liveDownloadDelayMs / 1000);
+            return;
+        }
+        if (normalizeInput) timerInput.value = String(liveDownloadDelayMs / 1000);
+    };
+    timerInput.addEventListener("input", () => updateDownloadDelay(false));
+    timerInput.addEventListener("change", () => updateDownloadDelay(true));
+
+    const concurrencyWrap = document.createElement("div");
+    concurrencyWrap.style.display = "flex";
+    concurrencyWrap.style.flexDirection = "column";
+    concurrencyWrap.style.gap = "5px";
+    concurrencyWrap.style.minWidth = "0";
+    timeRow.appendChild(concurrencyWrap);
+
+    const concurrencyLabel = document.createElement("div");
+    concurrencyLabel.style.fontSize = "12px";
+    concurrencyLabel.textContent = "Concurrent downloads";
+    concurrencyLabel.style.color = "#52525b";
+    concurrencyLabel.style.fontWeight = "500";
+    concurrencyLabel.style.lineHeight = "18px";
+    concurrencyLabel.title = `1 = serial; maximum ${MAX_DOWNLOAD_CONCURRENCY}`;
+    concurrencyWrap.appendChild(concurrencyLabel);
+
+    const concurrencyInput = document.createElement("input");
+    concurrencyInput.type = "number";
+    concurrencyInput.min = "1";
+    concurrencyInput.max = String(MAX_DOWNLOAD_CONCURRENCY);
+    concurrencyInput.step = "1";
+    concurrencyInput.value = savedDownloadConcurrency;
+    concurrencyInput.title = `1 = serial; up to ${MAX_DOWNLOAD_CONCURRENCY} simultaneous downloads`;
+    applyInputBaseStyle(concurrencyInput);
+    concurrencyInput.style.width = "100%";
+    concurrencyInput.style.height = "38px";
+    concurrencyInput.style.fontSize = "12px";
+    concurrencyInput.style.padding = "0 10px";
+    concurrencyWrap.appendChild(concurrencyInput);
+
+    const normalizeDownloadConcurrency = () => {
+        return normalizeConcurrency(concurrencyInput.value, MAX_DOWNLOAD_CONCURRENCY, 1);
+    };
+
+    const updateDownloadConcurrency = (normalizeInput = false) => {
+        if (concurrencyInput.value.trim() === "") {
+            if (normalizeInput) concurrencyInput.value = String(liveDownloadConcurrency);
+            return;
+        }
+        liveDownloadConcurrency = normalizeDownloadConcurrency();
+        writeStorage(DOWNLOAD_CONCURRENCY_KEY, String(liveDownloadConcurrency));
+        activeDownloadRuntime?.setConcurrency?.(liveDownloadConcurrency);
+        if (normalizeInput) concurrencyInput.value = String(liveDownloadConcurrency);
+    };
+    concurrencyInput.addEventListener("input", () => updateDownloadConcurrency(false));
+    concurrencyInput.addEventListener("change", () => updateDownloadConcurrency(true));
 
     const batchSizeWrap = document.createElement("div");
     batchSizeWrap.style.display = "flex";
@@ -483,12 +570,18 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
     batchSizeInput.style.padding = "0 10px";
     batchSizeWrap.appendChild(batchSizeInput);
 
-    batchSizeInput.addEventListener("change", () => {
+    const updateBatchSize = (normalizeInput = false) => {
         const batchSize = batchSizeInput.value.trim() === "" ? NaN : Math.floor(Number(batchSizeInput.value));
-        batchSizeInput.value = Number.isFinite(batchSize) && batchSize >= 1 ? String(batchSize) : "50";
-        writeStorage(BATCH_SIZE_KEY, batchSizeInput.value);
-        console.log("Saved batch size:", batchSizeInput.value);
-    });
+        if (Number.isFinite(batchSize) && batchSize >= 1) {
+            liveBatchSize = batchSize;
+            writeStorage(BATCH_SIZE_KEY, String(liveBatchSize));
+            if (normalizeInput) batchSizeInput.value = String(liveBatchSize);
+            return;
+        }
+        if (normalizeInput) batchSizeInput.value = String(liveBatchSize);
+    };
+    batchSizeInput.addEventListener("input", () => updateBatchSize(false));
+    batchSizeInput.addEventListener("change", () => updateBatchSize(true));
 
     const batchWrap = document.createElement("div");
     batchWrap.style.display = "flex";
@@ -517,18 +610,24 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
     batchInput.style.padding = "0 10px";
     batchWrap.appendChild(batchInput);
 
-    batchInput.addEventListener("change", () => {
+    const updateBatchInterval = (normalizeInput = false) => {
         const seconds = batchInput.value.trim() === "" ? NaN : Number(batchInput.value);
-        batchInput.value = Number.isFinite(seconds) && seconds >= 0 ? String(seconds) : "2100";
-        writeStorage(BATCH_INTERVAL_SECONDS_KEY, batchInput.value);
-        console.log("Saved batch interval (seconds):", batchInput.value);
-    });
+        if (Number.isFinite(seconds) && seconds >= 0) {
+            liveBatchIntervalMs = Math.round(seconds * 1000);
+            writeStorage(BATCH_INTERVAL_SECONDS_KEY, String(liveBatchIntervalMs / 1000));
+            if (normalizeInput) batchInput.value = String(liveBatchIntervalMs / 1000);
+            return;
+        }
+        if (normalizeInput) batchInput.value = String(liveBatchIntervalMs / 1000);
+    };
+    batchInput.addEventListener("input", () => updateBatchInterval(false));
+    batchInput.addEventListener("change", () => updateBatchInterval(true));
 
 
     // ---- 多行 DOI 输入框 ----
     const label2 = document.createElement("div");
     label2.style.fontSize = "12px";
-    label2.textContent = "DOI list · 0";
+    label2.textContent = "DOI list: 0";
     label2.style.width = "100%";
     label2.style.color = "#52525b";
     label2.style.fontWeight = "500";
@@ -543,7 +642,7 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
     textarea.style.lineHeight = "1.5";
     textarea.style.resize = "vertical"; // 只允许垂直调整大小，禁止水平调整
     textarea.style.overflowX = "hidden";
-    textarea.placeholder = "Paste DOI text here, or drop files onto this panel…";
+    textarea.placeholder = "Paste DOI text here, or drop files onto this panel...";
     contentContainer.appendChild(textarea);
 
     const dropHelper = document.createElement("div");
@@ -554,13 +653,8 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
     dropHelper.style.lineHeight = "1.4";
     contentContainer.appendChild(dropHelper);
 
-    // ---- 下载目录选择按钮（独立一行） ----
+    // ---- 下载目录选择按钮 ----
     const selectDownloadDirBtn = document.createElement("button");
-    const updateDownloadDirButton = () => {
-        const label = downloadDirName ? `Folder: ${downloadDirName}` : "Choose Folder";
-        setIconButtonContent(selectDownloadDirBtn, "fa-folder-open", label);
-    };
-    updateDownloadDirButton();
     selectDownloadDirBtn.style.height = "38px";
     selectDownloadDirBtn.style.width = "100%";
     selectDownloadDirBtn.style.border = "1px solid #d4d4d8";
@@ -583,6 +677,12 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
     selectDownloadDirBtn.style.whiteSpace = "nowrap";
     applyButtonStyle(selectDownloadDirBtn);
     contentContainer.appendChild(selectDownloadDirBtn);
+
+    const updateDownloadDirButton = () => {
+        const label = downloadDirName ? `Folder: ${downloadDirName}` : "Choose Folder";
+        setIconButtonContent(selectDownloadDirBtn, "fa-folder-open", label);
+    };
+    updateDownloadDirButton();
 
     // ---- 工具按钮行 ----
     const toolsRow = document.createElement("div");
@@ -796,7 +896,7 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
     }
 
     const updateDoiCount = () => {
-        label2.textContent = `DOI list · ${parseDoiList(textarea.value).length}`;
+        label2.textContent = `DOI list: ${parseDoiList(textarea.value).length}`;
     };
     textarea.addEventListener("input", updateDoiCount);
     updateDoiCount();
@@ -886,6 +986,7 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
 
     let downloadedDois = [];
     let activeDownloadController = null;
+    let pdfIndexUpdateQueue = Promise.resolve();
 
     const setDownloadRunning = (running) => {
         btn.disabled = running;
@@ -894,6 +995,12 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
         stopBtn.disabled = !running;
         stopBtn.style.cursor = running ? "pointer" : "not-allowed";
         stopBtn.style.opacity = running ? "1" : "0.45";
+        syncBtn.disabled = running;
+        syncBtn.style.cursor = running ? "not-allowed" : "pointer";
+        syncBtn.style.opacity = running ? "0.6" : "1";
+        selectDownloadDirBtn.disabled = running;
+        selectDownloadDirBtn.style.cursor = running ? "not-allowed" : "pointer";
+        selectDownloadDirBtn.style.opacity = running ? "0.6" : "1";
     };
 
     const waitForDelay = (ms, signal) => new Promise((resolve, reject) => {
@@ -911,14 +1018,6 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
         };
         signal.addEventListener("abort", handleAbort, { once: true });
     });
-
-    const doiFromPdfFileName = (fileName) => {
-        const name = fileName.replace(/\.pdf$/i, "");
-        const separatorIndex = name.indexOf("_");
-        return separatorIndex < 0
-            ? name
-            : `${name.slice(0, separatorIndex)}/${name.slice(separatorIndex + 1)}`;
-    };
 
     const sha256Hex = async (blob) => {
         const buffer = await blob.arrayBuffer();
@@ -972,18 +1071,30 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
     };
 
     const writePdfIndex = async (dirHandle, records) => {
+        const deduplicated = deduplicatePdfRecordsBySha(
+            records,
+            record => pdfFileNameForDoi(record?.doi) === record?.filename
+        );
         const handle = await dirHandle.getFileHandle(PDF_INDEX_FILE_NAME, { create: true });
         const writable = await handle.createWritable();
         await writable.write(JSON.stringify({
             version: 1,
             updatedAt: new Date().toISOString(),
             algorithm: "SHA-256",
-            records: records.slice().sort((a, b) => a.filename.localeCompare(b.filename))
+            records: deduplicated.records.slice().sort((a, b) => a.filename.localeCompare(b.filename))
         }, null, 2));
         await writable.close();
+        return deduplicated;
     };
 
-    const synchronizePdfIndex = async (dirHandle) => {
+    const withDirectoryLock = async (dirHandle, scope, task) => {
+        const lockName = directoryLockName(dirHandle?.name, scope);
+        return runWithWebLock(globalThis.navigator?.locks, lockName, task, error => {
+            console.warn("[DOI PDF Download] Web Lock unavailable; continuing safely:", error);
+        });
+    };
+
+    const synchronizePdfIndex = async (dirHandle) => withDirectoryLock(dirHandle, "index", async () => {
         const index = await readPdfIndex(dirHandle);
         const previousByFileName = new Map(index.records.map(record => [record.filename, record]));
         const records = [];
@@ -1023,27 +1134,36 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
             });
         }
 
-        await writePdfIndex(dirHandle, records);
-        return { records, invalidFiles };
-    };
+        const deduplicated = await writePdfIndex(dirHandle, records);
+        return { records: deduplicated.records, invalidFiles, duplicateFiles: deduplicated.duplicates };
+    });
 
     const recordDownloadedPdf = async (dirHandle, fileName, doi, sourceUrl, blob, validation) => {
-        const index = await readPdfIndex(dirHandle);
-        const fileHandle = await dirHandle.getFileHandle(fileName);
-        const file = await fileHandle.getFile();
-        const record = {
-            doi,
-            filename: fileName,
-            size: file.size,
-            lastModified: file.lastModified,
-            sha256: await sha256Hex(blob),
-            downloadedAt: new Date().toISOString(),
-            sourceUrl,
-            validation
-        };
-        const records = index.records.filter(item => item.filename !== fileName);
-        records.push(record);
-        await writePdfIndex(dirHandle, records);
+        const sha256 = await sha256Hex(blob);
+        const updateIndex = () => withDirectoryLock(dirHandle, "index", async () => {
+            const index = await readPdfIndex(dirHandle);
+            const fileHandle = await dirHandle.getFileHandle(fileName);
+            const file = await fileHandle.getFile();
+            const record = {
+                doi,
+                filename: fileName,
+                size: file.size,
+                lastModified: file.lastModified,
+                sha256,
+                downloadedAt: new Date().toISOString(),
+                sourceUrl,
+                validation
+            };
+            const records = index.records.filter(item => item.filename !== fileName);
+            records.push(record);
+            await writePdfIndex(dirHandle, records);
+        });
+
+        // Concurrent downloads may finish together. Serialize the index read-modify-write
+        // section so that a later completion cannot overwrite an earlier record.
+        const queuedUpdate = pdfIndexUpdateQueue.then(updateIndex, updateIndex);
+        pdfIndexUpdateQueue = queuedUpdate.catch(() => {});
+        await queuedUpdate;
     };
 
     function formatCountdown(ms) {
@@ -1057,20 +1177,30 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
         return `${pad(minutes)}:${pad(seconds)}`;
     }
 
-    async function runBatchCooldown(totalMs, signal) {
-        let remaining = totalMs;
+    const waitForLiveDelay = async (getTotalMs, signal, tickMs = 100) => {
+        const startedAt = Date.now();
+        while (true) {
+            const totalMs = Math.max(0, Number(getTotalMs()) || 0);
+            const remaining = totalMs - (Date.now() - startedAt);
+            if (remaining <= 0) return;
+            await waitForDelay(Math.min(tickMs, remaining), signal);
+        }
+    };
+
+    async function runBatchCooldown(signal) {
+        const startedAt = Date.now();
         const update = () => {
+            const remaining = Math.max(0, liveBatchIntervalMs - (Date.now() - startedAt));
             cooldownDiv.textContent = remaining > 0
                 ? `Next batch starts in ${formatCountdown(remaining)}`
                 : "";
+            return remaining;
         };
-        update();
+        let remaining = update();
         while (remaining > 0) {
-            const tick = Math.min(1000, remaining);
+            const tick = Math.min(250, remaining);
             await waitForDelay(tick, signal);
-            remaining -= tick;
-            if (remaining < 0) remaining = 0;
-            update();
+            remaining = update();
         }
     }
 
@@ -1106,10 +1236,13 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
                     return;
                 }
             }
-            const { records, invalidFiles } = await synchronizePdfIndex(dirHandle);
+            const { records, invalidFiles, duplicateFiles } = await synchronizePdfIndex(dirHandle);
             invalidFiles.forEach(({ filename, reason }) => {
                 log(`Invalid PDF excluded: ${filename} (${reason})`);
             });
+            if (duplicateFiles.length > 0) {
+                console.info(`[DOI PDF Download] Removed ${duplicateFiles.length} duplicate SHA-256 record(s) from the index.`);
+            }
             const dois = records.map(record => record.doi).filter(Boolean);
             downloadedDois = Array.from(new Set(dois));
             if (downloadedDois.length === 0) {
@@ -1174,14 +1307,17 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
             const writable = await fileHandle.createWritable();
             await writable.write(blob);
             await writable.close();
-            return true;
         } catch (error) {
             console.warn("[DOI PDF Download] Failed to write file:", error);
-            return false;
+            const writeError = new Error(
+                `Could not write ${fileName} to folder ${dirHandle?.name || "selected folder"}: ${error?.message || error}`
+            );
+            writeError.name = "DirectoryWriteError";
+            throw writeError;
         }
     }
 
-    async function download_pdf(doi, template, signal) {
+    async function download_pdf(doi, template, signal, dirHandle) {
         const url = template.replace("{doi}", doi);
         const res = await fetch(url, { signal });
         if (!res.ok) {
@@ -1196,25 +1332,15 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
             throw new DOMException("Download stopped", "AbortError");
         }
 
-        const fileName = doi.replace(/\//g, "_") + ".pdf";
-        const dirHandle = await getWritableDirectoryHandle();
-        if (dirHandle) {
-            const saved = await writeBlobToDirectory(dirHandle, fileName, blob);
-            if (saved) {
-                try {
-                    await recordDownloadedPdf(dirHandle, fileName, doi, url, blob, validation);
-                } catch (error) {
-                    console.warn("[DOI PDF Download] PDF saved, but index update failed:", error);
-                }
-                return;
+        const fileName = pdfFileNameForDoi(doi);
+        await withDirectoryLock(dirHandle, `file:${fileName}`, async () => {
+            await writeBlobToDirectory(dirHandle, fileName, blob);
+            try {
+                await recordDownloadedPdf(dirHandle, fileName, doi, url, blob, validation);
+            } catch (error) {
+                console.warn("[DOI PDF Download] PDF saved, but index update failed:", error);
             }
-        }
-
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = fileName;
-        a.click();
-        URL.revokeObjectURL(a.href);
+        });
     }
 
     // ==============================
@@ -1230,61 +1356,97 @@ const { buildSynchronizedPdfProvenance } = require("./pdf-index-record");
             return;
         }
 
-        const downloadDelaySeconds = timerInput.value.trim() === "" ? NaN : Number(timerInput.value);
-        const batchIntervalSeconds = batchInput.value.trim() === "" ? NaN : Number(batchInput.value);
-        const parsedBatchSize = batchSizeInput.value.trim() === "" ? NaN : Math.floor(Number(batchSizeInput.value));
-        const perDownloadDelay = Math.round((Number.isFinite(downloadDelaySeconds) && downloadDelaySeconds >= 0
-            ? downloadDelaySeconds
-            : 10) * 1000);
-        const batchCooldown = Math.round((Number.isFinite(batchIntervalSeconds) && batchIntervalSeconds >= 0
-            ? batchIntervalSeconds
-            : 2100) * 1000);
-        const batchSize = Number.isFinite(parsedBatchSize) && parsedBatchSize >= 1 ? parsedBatchSize : 50;
-
-        timerInput.value = String(perDownloadDelay / 1000);
-        batchInput.value = String(batchCooldown / 1000);
-        batchSizeInput.value = String(batchSize);
+        // Resolve and authorize the tab-specific folder while the Download click
+        // still provides a user gesture. Never fall back to Chrome's Downloads folder.
+        const batchDirectoryHandle = await getWritableDirectoryHandle();
+        if (!batchDirectoryHandle) {
+            log("Download folder is unavailable. Click Choose Folder in this tab and select it again.");
+            return;
+        }
+        updateDownloadDelay(true);
+        updateBatchInterval(true);
+        updateBatchSize(true);
+        updateDownloadConcurrency(true);
+        timerInput.value = String(liveDownloadDelayMs / 1000);
+        batchInput.value = String(liveBatchIntervalMs / 1000);
+        batchSizeInput.value = String(liveBatchSize);
+        concurrencyInput.value = String(liveDownloadConcurrency);
         writeStorage(DOWNLOAD_DELAY_SECONDS_KEY, timerInput.value);
         writeStorage(BATCH_INTERVAL_SECONDS_KEY, batchInput.value);
         writeStorage(BATCH_SIZE_KEY, batchSizeInput.value);
-        log(`Total ${lines.length} DOIs, start download...`);
+        writeStorage(DOWNLOAD_CONCURRENCY_KEY, concurrencyInput.value);
+        log(`Using ${batchDirectoryHandle.name || downloadDirName}: ${lines.length} DOIs, ${liveDownloadConcurrency} concurrent download${liveDownloadConcurrency === 1 ? "" : "s"}...`);
         activeDownloadController = new AbortController();
         const { signal } = activeDownloadController;
         setDownloadRunning(true);
         let stopped = false;
+        let directoryFailureMessage = "";
 
         try {
-            for (let i = 0; i < lines.length; i++) {
-                const doi = lines[i];
-                try {
-                    await download_pdf(doi, template, signal);
-                    log(` ${doi}  (${i + 1}/${lines.length})`);
-                } catch (err) {
-                    if (err?.name === "AbortError") {
-                        stopped = true;
-                        break;
+            let finishedCount = 0;
+            let batchStart = 0;
+            while (batchStart < lines.length) {
+                const batchSize = liveBatchSize;
+                const batch = lines.slice(batchStart, batchStart + batchSize);
+                const runner = createAdaptiveConcurrentRunner(
+                    batch,
+                    liveDownloadConcurrency,
+                    async (doi) => {
+                        if (signal.aborted) return true;
+                        try {
+                            await download_pdf(doi, template, signal, batchDirectoryHandle);
+                            finishedCount += 1;
+                            log(`${doi} (${finishedCount}/${lines.length} finished)`);
+                        } catch (err) {
+                            if (err?.name === "AbortError") return true;
+                            if (err?.name === "DirectoryWriteError") {
+                                directoryFailureMessage = err.message;
+                                activeDownloadController?.abort();
+                                return true;
+                            }
+                            finishedCount += 1;
+                            log(`Failed: ${doi} (${err?.message || err}; ${finishedCount}/${lines.length} finished)`);
+                        }
+                        return false;
+                    },
+                    async () => {
+                        if (liveDownloadDelayMs <= 0) return signal.aborted;
+                        try {
+                            await waitForLiveDelay(() => liveDownloadDelayMs, signal);
+                            return false;
+                        } catch (err) {
+                            if (err?.name === "AbortError") return true;
+                            throw err;
+                        }
                     }
-                    log(`Failed: ${doi} (${err?.message || err})`);
+                );
+                activeDownloadRuntime = runner;
+                const workerStopped = await runner.promise;
+                activeDownloadRuntime = null;
+                if (workerStopped || signal.aborted) {
+                    stopped = true;
+                    break;
                 }
-                const isLast = i === lines.length - 1;
-                const completedBatch = (i + 1) % batchSize === 0;
-                if (isLast) continue;
-                if (completedBatch) {
-                    log(`${batchSize} done. Next batch starts in ${batchCooldown / 1000} seconds...`);
-                    await runBatchCooldown(batchCooldown, signal);
-                } else {
-                    await waitForDelay(perDownloadDelay, signal);
+
+                batchStart += batch.length;
+                const hasNextBatch = batchStart < lines.length;
+                if (hasNextBatch) {
+                    log(`${batch.length} done. Next batch starts in ${liveBatchIntervalMs / 1000} seconds...`);
+                    await runBatchCooldown(signal);
                 }
             }
         } catch (err) {
             if (err?.name === "AbortError") stopped = true;
             else log(`Download interrupted: ${err?.message || err}`);
         } finally {
+            activeDownloadRuntime = null;
             activeDownloadController = null;
             setDownloadRunning(false);
             cooldownDiv.textContent = "";
         }
-        log(stopped ? "Download stopped." : "All done!");
+        log(directoryFailureMessage
+            ? `Download stopped: ${directoryFailureMessage}`
+            : stopped ? "Download stopped." : "All done!");
     }
 
     syncBtn.onclick = () => { void syncFromFolder(); };

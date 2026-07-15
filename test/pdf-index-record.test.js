@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const {
   buildSynchronizedPdfProvenance,
+  deduplicatePdfRecordsBySha,
   doiResolverUrl
 } = require("../src/pdf-index-record");
 
@@ -52,4 +53,34 @@ test("DOI resolver URLs encode query and fragment delimiters in DOI suffixes", (
     doiResolverUrl("10.1234/value?part#section"),
     "https://doi.org/10.1234/value%3Fpart%23section"
   );
+});
+
+test("PDF index deduplication prefers the canonical encoded filename", () => {
+  const legacy = {
+    doi: "10.1023/b_jota.0000042595.85511.44",
+    filename: "10.1023_b_jota.0000042595.85511.44.pdf",
+    sha256: "ABC123"
+  };
+  const canonical = {
+    doi: "10.1023/b:jota.0000042595.85511.44",
+    filename: "10.1023_2Fb_3Ajota.0000042595.85511.44.pdf",
+    sha256: "abc123"
+  };
+
+  const result = deduplicatePdfRecordsBySha(
+    [legacy, canonical],
+    record => record === canonical
+  );
+
+  assert.deepEqual(result.records, [canonical]);
+  assert.deepEqual(result.duplicates, [legacy]);
+});
+
+test("PDF index deduplication retains records without a SHA-256", () => {
+  const records = [
+    { filename: "one.pdf", sha256: null },
+    { filename: "two.pdf", sha256: null }
+  ];
+
+  assert.deepEqual(deduplicatePdfRecordsBySha(records).records, records);
 });

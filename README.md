@@ -10,7 +10,7 @@ WOS Aide is a Chrome extension for Web of Science users. It helps streamline com
 - Run DOI-based and journal-based lookup workflows
 - Export WoS records in TXT or BIB format
 - Copy the current WoS SID to the clipboard with one toolbar click
-- Batch download PDFs with configurable batch size and second-based delays
+- Batch download PDFs with configurable concurrency, batch size, second-based delays, and a separate persistent download folder for each browser tab
 - Drop text, CSV, RIS, BibTeX, JSON, or XML files into the PDF panel to extract DOI values automatically
 
 ## Main Panels

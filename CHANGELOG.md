@@ -2,6 +2,53 @@
 
 ## Unreleased
 
+## 0.1.13 - 2026-07-15
+
+### Fixed
+- Deduplicated PDF index records by SHA-256 during both folder synchronization and download recording.
+- Preferred canonical encoded DOI filenames over legacy underscore filenames when both point to identical PDF content.
+- Preserved duplicate physical PDF files while preventing duplicate hashes from being written to `pdf-download-index.json`.
+
+## 0.1.12 - 2026-07-15
+
+### Fixed
+- Encoded DOI characters such as `/`, `:`, `*`, and `?` into reversible, cross-platform-safe PDF filenames before using the File System Access API.
+- Preserved folder synchronization support for both the new encoded filenames and legacy slash-to-underscore filenames.
+
+## 0.1.11 - 2026-07-15
+
+### Fixed
+- Authorized and pinned each PDF batch to the current tab's selected directory before starting network downloads.
+- Removed the silent anchor-download fallback that sent PDFs to the system Downloads folder when directory permission or writing failed.
+- Stopped the batch with a clear folder error when its selected directory becomes unavailable or unwritable.
+
+## 0.1.10 - 2026-07-15
+
+### Fixed
+- Prevented PDF module injection from hanging when the current-tab lookup does not respond, with a tab-local session fallback after a short timeout.
+- Made cross-tab PDF locking fall back safely when Web Locks cannot be acquired, without rerunning a failed protected write.
+- Replaced non-ASCII punctuation in the PDF downloader interface and logging with plain ASCII characters.
+
+## 0.1.9 - 2026-07-15
+
+### Added
+- Added per-tab PDF download directories that are restored independently when each browser tab reloads.
+- Added cross-tab Web Locks around PDF file and index updates to prevent competing writes when tabs use the same folder.
+
+## 0.1.8 - 2026-07-15
+
+### Added
+- Added a `tandfonline` PDF path preset using `/doi/pdf/{doi}?needAccess=true`.
+
+### Changed
+- Removed the `POMS/JOM` and `JMMD` PDF path presets.
+- Made PDF download settings save while typing and apply to an active download; concurrency now resizes the current worker pool, while delay and cooldown timers use live values.
+
+## 0.1.7 - 2026-07-15
+
+### Added
+- Added configurable PDF download concurrency (1-10), with `1` preserving serial downloads and higher values running a bounded worker pool.
+
 ## 0.1.6 - 2026-07-14
 
 ### Added

@@ -24,7 +24,34 @@ const buildSynchronizedPdfProvenance = ({ previous, doi, lastModified, synchroni
   sourceUrl: nonEmptyString(previous?.sourceUrl) || doiResolverUrl(doi)
 });
 
+const deduplicatePdfRecordsBySha = (records, isPreferred = () => false) => {
+  const selected = new Map();
+  const duplicates = [];
+
+  for (const record of records || []) {
+    const key = nonEmptyString(record?.sha256)
+      ? `sha256:${record.sha256.toLowerCase()}`
+      : `filename:${record?.filename || selected.size}`;
+    const existing = selected.get(key);
+    if (!existing) {
+      selected.set(key, record);
+      continue;
+    }
+
+    const replaceExisting = isPreferred(record) && !isPreferred(existing);
+    if (replaceExisting) {
+      selected.set(key, record);
+      duplicates.push(existing);
+    } else {
+      duplicates.push(record);
+    }
+  }
+
+  return { records: Array.from(selected.values()), duplicates };
+};
+
 module.exports = {
   buildSynchronizedPdfProvenance,
+  deduplicatePdfRecordsBySha,
   doiResolverUrl
 };
