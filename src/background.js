@@ -365,6 +365,58 @@ async function readFileContent(fileHandle) {
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'INJECT_MAIN_WORLD_FILES') {
+    (async () => {
+      const allowedFiles = new Set([
+        'jquery-3.7.0.js',
+        'z-Wos.js',
+        'pub-fun.js',
+        'z-easyscholar.js',
+        'z-wos-doi-query.js',
+        'z-doi-pdf-download.js',
+        'z-chat.js',
+        'injected.js',
+        'module-bridge.js',
+        'chatgpt-prompts-quickload.js'
+      ]);
+      const tabId = sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null;
+      const files = Array.isArray(request.files) ? request.files : [];
+
+      if (!tabId) {
+        sendResponse({ success: false, error: 'No sender tab is available for MAIN world injection.' });
+        return;
+      }
+      if (!files.length || files.some(file => !allowedFiles.has(file))) {
+        sendResponse({ success: false, error: 'The requested MAIN world file list is not allowed.' });
+        return;
+      }
+
+      try {
+        const extensionBaseUrl = chrome.runtime.getURL('');
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          world: 'MAIN',
+          func: (currentTabId, baseUrl) => {
+            globalThis.__WOS_AIDE_TAB_ID__ = currentTabId;
+            globalThis.__WOS_AIDE_EXTENSION_BASE_URL__ = baseUrl;
+          },
+          args: [tabId, extensionBaseUrl]
+        });
+        for (const file of files) {
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            world: 'MAIN',
+            files: [file]
+          });
+        }
+        sendResponse({ success: true, tabId, files });
+      } catch (error) {
+        sendResponse({ success: false, error: error?.message || String(error) });
+      }
+    })();
+    return true;
+  }
+
   if (request.type === 'GET_CURRENT_TAB_ID') {
     sendResponse({
       success: true,

@@ -1,5 +1,8 @@
-const WOS_HOST_PATTERN = /(^|\.)(webofscience\.com|webofknowledge\.com|isiknowledge\.com)$/i;
-const isWosPage = () => WOS_HOST_PATTERN.test(window.location.hostname || '');
+const { classifyWosHost, isWosLocation } = require('./wos-host');
+const isWosPage = () => (
+  globalThis.__WOS_AIDE_PROXY_HOST__ === true
+  || isWosLocation(window.location.hostname, window.location.href)
+);
 const isChatGptPage = () => /(^|\.)chatgpt\.com$/i.test(window.location.hostname || '');
 const isSameWindowMessage = (event) => event?.source === window;
 const allowStorageBridge = () => isWosPage() || isChatGptPage();
@@ -166,25 +169,28 @@ const MODULES = {
 let isBridgeReady = false;
 let bridgePromise = null;
 const moduleInjectionPromises = new Map();
-const currentTabIdPromise = new Promise((resolve) => {
-  let settled = false;
-  const finish = (tabId = '') => {
-    if (settled) return;
-    settled = true;
-    window.clearTimeout(timeoutId);
-    resolve(tabId);
-  };
-  const timeoutId = window.setTimeout(() => finish(''), 1500);
+let lastMainWorldInjectionError = '';
+let successfulMainWorldInjections = 0;
+
+const injectMainWorldFiles = (files) => new Promise((resolve, reject) => {
   try {
-    chrome.runtime.sendMessage({ type: 'GET_CURRENT_TAB_ID' }, response => {
+    chrome.runtime.sendMessage({ type: 'INJECT_MAIN_WORLD_FILES', files }, response => {
       if (chrome.runtime.lastError) {
-        finish('');
+        lastMainWorldInjectionError = chrome.runtime.lastError.message;
+        reject(new Error(chrome.runtime.lastError.message));
         return;
       }
-      finish(Number.isInteger(response?.tabId) ? String(response.tabId) : '');
+      if (!response?.success) {
+        lastMainWorldInjectionError = response?.error || 'MAIN world injection failed';
+        reject(new Error(response?.error || 'MAIN world injection failed'));
+        return;
+      }
+      lastMainWorldInjectionError = '';
+      successfulMainWorldInjections += 1;
+      resolve(response);
     });
-  } catch (_error) {
-    finish('');
+  } catch (error) {
+    reject(error);
   }
 });
 
@@ -231,18 +237,21 @@ const getWosToolbarShortcutDefinitions = () => {
       id: 'doi-query',
       title: 'DOI Query',
       iconHtml: '<i class="fa-solid fa-magnifying-glass wos-aide-toolbar-icon" aria-hidden="true"></i>',
+      fallbackText: 'DOI',
       preferredTab: 'query'
     },
     {
       id: 'wos-export',
       title: 'WOS Data Export',
       iconHtml: '<i class="fa-regular fa-circle-down wos-aide-toolbar-icon" aria-hidden="true"></i>',
+      fallbackText: 'EXP',
       preferredTab: 'export'
     },
     {
       id: 'sid-info',
       title: 'SID Info',
       iconHtml: WOS_SID_ICON_HTML,
+      fallbackText: 'SID',
       action: 'sid-info'
     }
   ];
@@ -252,6 +261,7 @@ const getWosToolbarShortcutDefinitions = () => {
       id: 'journal-query',
       title: 'Journal Query',
       iconHtml: '<i class="fa-regular fa-newspaper wos-aide-toolbar-icon" aria-hidden="true"></i>',
+      fallbackText: 'JNL',
       preferredTab: 'journal'
     });
   }
@@ -261,12 +271,17 @@ const getWosToolbarShortcutDefinitions = () => {
       id: 'wos-query',
       title: 'WOS Query',
       iconHtml: '<i class="fa-regular fa-comment-dots wos-aide-toolbar-icon" aria-hidden="true"></i>',
+      fallbackText: 'WOS',
       preferredTab: 'builder'
     });
   }
 
   return buttons;
 };
+
+const getToolbarIconMarkup = (iconHtml, fallbackText) => hasFontAwesome()
+  ? iconHtml
+  : `<span class="wos-aide-toolbar-fallback" aria-hidden="true">${fallbackText}</span>`;
 
 const waitForFontAwesomeReady = (attempt = 0) => new Promise((resolve) => {
   if (hasFontAwesome()) {
@@ -398,8 +413,8 @@ const copyWosSidFromToolbar = async (button) => {
   const copied = Boolean(sid) && await copyTextToClipboard(sid);
 
   button.innerHTML = copied
-    ? '<i class="fa-solid fa-check wos-aide-toolbar-icon" aria-hidden="true"></i>'
-    : '<i class="fa-solid fa-xmark wos-aide-toolbar-icon" aria-hidden="true"></i>';
+    ? getToolbarIconMarkup('<i class="fa-solid fa-check wos-aide-toolbar-icon" aria-hidden="true"></i>', 'OK')
+    : getToolbarIconMarkup('<i class="fa-solid fa-xmark wos-aide-toolbar-icon" aria-hidden="true"></i>', 'ERR');
   button.title = copied ? 'SID copied' : (sid ? 'SID copy failed' : 'SID not found');
   button.setAttribute('aria-label', button.title);
   button.classList.toggle('is-copy-success', copied);
@@ -415,7 +430,7 @@ const copyWosSidFromToolbar = async (button) => {
       ? button
       : document.querySelector('[data-wos-aide-shortcut="sid-info"]');
     if (!currentButton) return;
-    currentButton.innerHTML = WOS_SID_ICON_HTML;
+    currentButton.innerHTML = getToolbarIconMarkup(WOS_SID_ICON_HTML, 'SID');
     currentButton.title = 'SID Info';
     currentButton.setAttribute('aria-label', 'SID Info');
     currentButton.classList.remove('is-copy-success', 'is-copy-error');
@@ -431,7 +446,7 @@ const renderWosToolbarShortcutButtons = (shortcutsWrap) => {
   shortcutsWrap.replaceChildren();
   const buttons = getWosToolbarShortcutDefinitions();
 
-  buttons.forEach(({ id, title, iconHtml, preferredTab, action }) => {
+  buttons.forEach(({ id, title, iconHtml, fallbackText, preferredTab, action }) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'wos-aide-toolbar-btn';
@@ -444,7 +459,7 @@ const renderWosToolbarShortcutButtons = (shortcutsWrap) => {
     }
     button.title = title;
     button.setAttribute('aria-label', title);
-    button.innerHTML = iconHtml;
+    button.innerHTML = getToolbarIconMarkup(iconHtml, fallbackText);
     button.addEventListener('click', async (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -544,26 +559,14 @@ const ensureBridge = () => {
     return bridgePromise;
   }
 
-  bridgePromise = new Promise((resolve) => {
-    const existingBridge = document.querySelector('script[data-module-bridge="true"]');
-    if (existingBridge) {
-      existingBridge.addEventListener('load', () => {
-        isBridgeReady = true;
-        resolve();
-      }, { once: true });
-      return;
-    }
-
-    const bridge = document.createElement('script');
-    bridge.src = chrome.runtime.getURL('module-bridge.js');
-    bridge.dataset.moduleBridge = 'true';
-    bridge.onload = function() {
+  bridgePromise = injectMainWorldFiles(['module-bridge.js'])
+    .then(() => {
       isBridgeReady = true;
-      resolve();
-      this.remove();
-    };
-    (document.head || document.documentElement).appendChild(bridge);
-  });
+    })
+    .catch(error => {
+      bridgePromise = null;
+      throw error;
+    });
 
   return bridgePromise;
 };
@@ -615,7 +618,9 @@ const setModuleVisibility = (moduleId, visible) => {
   }
 
   // 发送可见性事件到页面脚本
-  ensureBridge().then(() => {
+  ensureBridge().catch(error => {
+    console.warn('[ContentScript] Visibility bridge injection failed:', error.message);
+  }).finally(() => {
     document.dispatchEvent(new CustomEvent(module.eventName, {
       detail: { visible }
     }));
@@ -649,38 +654,13 @@ const injectModule = (moduleId) => {
     return moduleInjectionPromises.get(moduleId);
   }
 
-  const injectionPromise = currentTabIdPromise.then(tabId => new Promise((resolve, reject) => {
-    const injectFile = (index) => {
-      if (index >= module.files.length) {
-        const element = document.getElementById(module.elementId);
-        if (element) {
-          resolve(element);
-        } else {
-          reject(new Error(`${module.name} loaded without creating its panel`));
-        }
-        return;
-      }
-
-      const file = module.files[index];
-      const script = document.createElement('script');
-      script.src = chrome.runtime.getURL(file);
-      script.dataset.inject = module.injectMarker;
-      if (tabId) {
-        script.dataset.wosAideTabId = tabId;
-      }
-      script.onload = function() {
-        this.remove();
-        injectFile(index + 1);
-      };
-      script.onerror = function() {
-        this.remove();
-        reject(new Error(`Failed to inject ${file} for ${module.name}`));
-      };
-      (document.head || document.documentElement).appendChild(script);
-    };
-
-    injectFile(0);
-  })).finally(() => {
+  const injectionPromise = injectMainWorldFiles(module.files).then(() => {
+    const element = document.getElementById(module.elementId);
+    if (!element) {
+      throw new Error(`${module.name} loaded without creating its panel`);
+    }
+    return element;
+  }).finally(() => {
     moduleInjectionPromises.delete(moduleId);
   });
 
@@ -865,6 +845,14 @@ const ensureWosToolbarShortcutsStyle = () => {
   display: inline-block;
   pointer-events: none;
 }
+#${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-fallback {
+  display: inline-block;
+  min-width: 24px;
+  font: 700 9px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: 0.02em;
+  text-align: center;
+  pointer-events: none;
+}
 #${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-btn.is-copy-success {
   background: #edf7f0;
   color: #237a45;
@@ -885,10 +873,10 @@ const ensureWosToolbarShortcuts = () => {
   if (!hasFontAwesome()) {
     ensurePageFontAwesome().then((ready) => {
       if (ready) {
-        ensureWosToolbarShortcuts();
+        const toolbar = document.getElementById(WOS_TOOLBAR_SHORTCUTS_ID);
+        if (toolbar) renderWosToolbarShortcutButtons(toolbar);
       }
     });
-    return;
   }
 
   ensureWosToolbarShortcutsStyle();
@@ -1057,6 +1045,36 @@ const bootstrapWosToolbarShortcuts = () => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'PING_WOS_AIDE') {
     sendResponse({ success: true });
+    return true;
+  }
+
+  if (request.type === 'DIAGNOSE_WOS_AIDE') {
+    const toolbar = document.getElementById(WOS_TOOLBAR_SHORTCUTS_ID);
+    const toolbarRect = toolbar?.getBoundingClientRect?.();
+    const moduleStates = Object.fromEntries(
+      Object.entries(MODULES).map(([moduleId]) => [moduleId, getModuleState(moduleId)])
+    );
+    sendResponse({
+      success: true,
+      contentScriptLoaded: true,
+      hostname: window.location.hostname || '',
+      href: window.location.href,
+      wosHostKind: globalThis.__WOS_AIDE_PROXY_HOST__ === true
+        ? 'proxy'
+        : classifyWosHost(window.location.hostname, window.location.href),
+      isWosPage: isWosPage(),
+      fontAwesomeReady: hasFontAwesome(),
+      toolbar: {
+        exists: Boolean(toolbar),
+        visible: Boolean(toolbar && toolbarRect && toolbarRect.width > 0 && toolbarRect.height > 0),
+        childCount: toolbar?.children?.length || 0
+      },
+      mainWorldInjection: {
+        successfulRequests: successfulMainWorldInjections,
+        lastError: lastMainWorldInjectionError
+      },
+      modules: moduleStates
+    });
     return true;
   }
 
@@ -1377,39 +1395,46 @@ if (isWosPage()) {
     if (changes.wosAideProjectName) {
       notifyEnlightenkeyProject(changes.wosAideProjectName.newValue || null);
     }
+    if (changes.doiPdfDownloadEnabled) {
+      const enabled = Boolean(changes.doiPdfDownloadEnabled.newValue);
+      if (enabled) {
+        injectModule('doiPdfDownload').then(element => {
+          element.style.display = 'flex';
+          setModuleVisibility('doiPdfDownload', true);
+        }).catch(error => {
+          console.error('[ContentScript] Failed to enable DOI PDF Download:', error);
+        });
+      } else {
+        const element = document.getElementById(MODULES.doiPdfDownload.elementId);
+        if (element) element.style.display = 'none';
+        setModuleVisibility('doiPdfDownload', false);
+      }
+    }
     if (shouldRefreshToolbar) {
       ensureWosToolbarShortcuts();
     }
   });
 
-  // Load the external injected script only on WoS-related pages.
-  const script = document.createElement('script');
-  script.src = chrome.runtime.getURL('injected.js');
-  script.onload = function() {
-    this.remove();
-  };
-  (document.head || document.documentElement).appendChild(script);
+  // Load page-context helpers through chrome.scripting so page CSP cannot block them.
+  injectMainWorldFiles(['injected.js']).catch(error => {
+    console.error('[ContentScript] Failed to inject WOS page helper:', error);
+  });
 }
 
-chrome.storage.local.get(['doiPdfDownloadEnabled'], result => {
-  if (result.doiPdfDownloadEnabled) {
-    setModuleVisibility('doiPdfDownload', true);
-    injectModule('doiPdfDownload').catch((error) => {
-      console.error('[ContentScript] Failed to inject DOI PDF Download:', error);
-    });
-  }
-});
+if (isWosPage()) {
+  chrome.storage.local.get(['doiPdfDownloadEnabled'], result => {
+    if (result.doiPdfDownloadEnabled) {
+      setModuleVisibility('doiPdfDownload', true);
+      injectModule('doiPdfDownload').catch((error) => {
+        console.error('[ContentScript] Failed to inject DOI PDF Download:', error);
+      });
+    }
+  });
+}
 
 // Inject ChatGPT prompts quickload helper on chatgpt.com
 if (location.hostname === 'chatgpt.com' || location.hostname.endsWith('.chatgpt.com')) {
-  const existingQuickload = document.querySelector('script[data-inject="chatgpt-prompts-quickload"]');
-  if (!existingQuickload) {
-    const quickloadScript = document.createElement('script');
-    quickloadScript.src = chrome.runtime.getURL('chatgpt-prompts-quickload.js');
-    quickloadScript.dataset.inject = 'chatgpt-prompts-quickload';
-    quickloadScript.onload = function() {
-      this.remove();
-    };
-    (document.head || document.documentElement).appendChild(quickloadScript);
-  }
+  injectMainWorldFiles(['chatgpt-prompts-quickload.js']).catch(error => {
+    console.error('[ContentScript] Failed to inject ChatGPT quickload helper:', error);
+  });
 }

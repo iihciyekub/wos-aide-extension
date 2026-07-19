@@ -2033,6 +2033,9 @@ window.wosids = [];
     const PROMPT_CACHE = new Map();
 
     const resolveExtensionBaseUrl = () => {
+        if (globalThis.__WOS_AIDE_EXTENSION_BASE_URL__) {
+            return globalThis.__WOS_AIDE_EXTENSION_BASE_URL__;
+        }
         try {
             if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
                 return chrome.runtime.getURL('');

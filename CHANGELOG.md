@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.1.15 - 2026-07-19
+
+### Added
+- Added a popup WOS page diagnosis action that reports toolbar, icon fallback, page-script injection, and host-access status.
+- Added explicit, persistent support for institution-specific HTTPS WOS proxy hosts after the user grants access to that exact origin.
+
+### Changed
+- Moved page-context script loading to Chrome's native MAIN-world injection API to avoid page Content Security Policy failures.
+- Persisted the DOI PDF Download toggle and applied changes to open WOS tabs without reopening the popup.
+
+### Fixed
+- Kept WOS toolbar controls visible with text fallbacks when Font Awesome cannot load on a computer or network.
+- Prevented WOS-only PDF panel initialization from running on unrelated pages.
+- Preserved proxy-host recognition across navigation and refresh, including generic institutional proxy domains whose rewritten URL no longer contains the WOS hostname.
+- Restored visible popup status and error reporting instead of discarding diagnostic messages.
+
 ## 0.1.13 - 2026-07-15
 
 ### Fixed

@@ -31,7 +31,9 @@ const getFallbackTabContextId = () => {
     }
 };
 
-const injectedTabContextId = document.currentScript?.dataset?.wosAideTabId || "";
+const injectedTabContextId = String(
+    globalThis.__WOS_AIDE_TAB_ID__ || document.currentScript?.dataset?.wosAideTabId || ""
+);
 const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
 
 

@@ -352,3 +352,10 @@ body {
     font-size: 11px;
     color: var(--muted);
 }
+
+#popupStatus {
+    width: 100%;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+}

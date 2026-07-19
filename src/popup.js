@@ -1,6 +1,7 @@
 'use strict';
 
 import './popup.css';
+const { classifyWosHost } = require('./wos-host');
 
 (function() {
   const CHAT_API_KEY_STORAGE_KEY = 'wosOpenaiApiKey';
@@ -65,6 +66,76 @@ import './popup.css';
         return;
       }
       resolve(Boolean(granted));
+    });
+  });
+
+  const stableHostHash = (value) => {
+    let hash = 2166136261;
+    for (const character of String(value || '')) {
+      hash ^= character.charCodeAt(0);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+  };
+
+  const registerPersistentWosHost = (tab) => new Promise((resolve, reject) => {
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(tab?.url || '');
+    } catch (_error) {
+      reject(new Error('The active tab URL is unavailable.'));
+      return;
+    }
+    if (parsedUrl.protocol !== 'https:') {
+      reject(new Error('Only HTTPS WOS proxy pages can be registered.'));
+      return;
+    }
+
+    const matchPattern = `${parsedUrl.origin}/*`;
+    const suffix = stableHostHash(parsedUrl.hostname);
+    const registrations = [
+      {
+        id: `wos-aide-proxy-loader-${suffix}`,
+        matches: [matchPattern],
+        js: ['wos-proxy-marker.js', 'z-Wos-loader.js'],
+        runAt: 'document_start',
+        persistAcrossSessions: true
+      },
+      {
+        id: `wos-aide-proxy-content-${suffix}`,
+        matches: [matchPattern],
+        js: ['wos-proxy-marker.js', 'contentScript.js'],
+        runAt: 'document_idle',
+        persistAcrossSessions: true
+      }
+    ];
+    const ids = registrations.map(item => item.id);
+
+    chrome.scripting.getRegisteredContentScripts({ ids }, existing => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      const register = () => {
+        chrome.scripting.registerContentScripts(registrations, () => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          resolve({ matchPattern, registered: true });
+        });
+      };
+      if (!existing?.length) {
+        register();
+        return;
+      }
+      chrome.scripting.unregisterContentScripts({ ids: existing.map(item => item.id) }, () => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        register();
+      });
     });
   });
 
@@ -239,7 +310,8 @@ import './popup.css';
     const lmStudioHint = document.getElementById('lmStudioHint');
 
     const openDoiPdfDownloadBtn = document.getElementById('openDoiPdfDownloadBtn');
-    const sidDisplay = null;
+    const diagnoseWosBtn = document.getElementById('diagnoseWosBtn');
+    const sidDisplay = document.getElementById('popupStatus');
 
     // 新增：DOI列表显示区域和清空按钮
 
@@ -287,7 +359,6 @@ import './popup.css';
       }
     });
 
-    // 所有面板默认状态为未开启（false），不从本地存储读取
     let isDoiPdfDownloadEnabled = false;
     let currentEasyScholarApiKey = '';
     let currentEasyScholarVerified = false;
@@ -297,8 +368,11 @@ import './popup.css';
     let currentOpenAIVerified = false;
     let currentLmStudioVerified = false;
 
-    // 初始化按钮状态为 Enable（未开启）
     setDoiPdfDownloadToggle(openDoiPdfDownloadBtn, false);
+    chrome.storage.local.get(['doiPdfDownloadEnabled'], result => {
+      isDoiPdfDownloadEnabled = Boolean(result.doiPdfDownloadEnabled);
+      setDoiPdfDownloadToggle(openDoiPdfDownloadBtn, isDoiPdfDownloadEnabled);
+    });
 
     const updateApiKeyHint = (message, variant) => {
       if (!apiKeyHint) return;
@@ -1420,39 +1494,112 @@ import './popup.css';
 
 
     openDoiPdfDownloadBtn.addEventListener('click', () => {
-      isDoiPdfDownloadEnabled = !isDoiPdfDownloadEnabled;
-      setDoiPdfDownloadToggle(openDoiPdfDownloadBtn, isDoiPdfDownloadEnabled);
-
-      withActiveTab((tab) => {
-        if (!tab) {
-          setStatus(sidDisplay, 'No active tab detected', 'status--error');
+      const nextEnabled = !isDoiPdfDownloadEnabled;
+      chrome.storage.local.set({ doiPdfDownloadEnabled: nextEnabled }, () => {
+        if (chrome.runtime.lastError) {
+          setStatus(sidDisplay, `Failed to save PDF state: ${chrome.runtime.lastError.message}`, 'status--error');
           return;
         }
-        sendMessageToTabWithBootstrap(
-          tab.id,
-          { type: isDoiPdfDownloadEnabled ? 'OPEN_DOI_PDF_DOWNLOAD' : 'CLOSE_DOI_PDF_DOWNLOAD' },
-          (error, response) => {
-            if (error) {
-              setStatus(sidDisplay, 'Error: ' + error.message, 'status--error');
-              return;
-            }
-            if (response && response.success) {
-              setStatus(
-                sidDisplay,
-                isDoiPdfDownloadEnabled ? 'DOI PDF download enabled' : 'DOI PDF download disabled',
-                'status--success'
-              );
-            } else {
-              setStatus(
-                sidDisplay,
-                response?.error || 'Failed to toggle DOI PDF download',
-                'status--error'
-              );
-            }
+        isDoiPdfDownloadEnabled = nextEnabled;
+        setDoiPdfDownloadToggle(openDoiPdfDownloadBtn, isDoiPdfDownloadEnabled);
+
+        withActiveTab((tab) => {
+          if (!tab) {
+            setStatus(sidDisplay, 'PDF state saved, but no active tab was detected.', 'status--error');
+            return;
           }
-        );
+          sendMessageToTabWithBootstrap(
+            tab.id,
+            { type: isDoiPdfDownloadEnabled ? 'OPEN_DOI_PDF_DOWNLOAD' : 'CLOSE_DOI_PDF_DOWNLOAD' },
+            (error, response) => {
+              if (error) {
+                setStatus(sidDisplay, `PDF state saved; page connection failed: ${error.message}`, 'status--error');
+                return;
+              }
+              if (response && response.success) {
+                setStatus(
+                  sidDisplay,
+                  isDoiPdfDownloadEnabled ? 'DOI PDF download enabled' : 'DOI PDF download disabled',
+                  'status--success'
+                );
+              } else {
+                setStatus(
+                  sidDisplay,
+                  response?.error || 'Failed to toggle DOI PDF download',
+                  'status--error'
+                );
+              }
+            }
+          );
+        });
       });
     });
+
+    if (diagnoseWosBtn) {
+      diagnoseWosBtn.addEventListener('click', () => {
+        setStatus(sidDisplay, 'Diagnosing the active WOS page...', 'status--info');
+        withActiveTab(async (tab) => {
+          if (!tab) {
+            setStatus(sidDisplay, 'No active tab detected.', 'status--error');
+            return;
+          }
+
+          let persistentAccess = false;
+          const hostKind = (() => {
+            try {
+              const parsed = new URL(tab.url || '');
+              return classifyWosHost(parsed.hostname, parsed.href);
+            } catch (_error) {
+              return 'unsupported';
+            }
+          })();
+
+          if (hostKind === 'proxy') {
+            try {
+              const parsed = new URL(tab.url);
+              const originPattern = `${parsed.origin}/*`;
+              const granted = await requestOriginPermissions([originPattern]);
+              if (granted) {
+                await registerPersistentWosHost(tab);
+                persistentAccess = true;
+              }
+            } catch (error) {
+              setStatus(sidDisplay, `Proxy access setup failed: ${error.message}`, 'status--error');
+              return;
+            }
+          }
+
+          sendMessageToTabWithBootstrap(tab.id, { type: 'DIAGNOSE_WOS_AIDE' }, (error, response) => {
+            if (error) {
+              setStatus(sidDisplay, `Connection failed: ${error.message}`, 'status--error');
+              return;
+            }
+            if (!response?.success) {
+              setStatus(sidDisplay, response?.error || 'Diagnosis failed.', 'status--error');
+              return;
+            }
+            if (!response.isWosPage) {
+              setStatus(sidDisplay, `Unsupported page: ${response.hostname || 'unknown host'}`, 'status--error');
+              return;
+            }
+
+            const toolbarState = response.toolbar?.visible ? 'visible' : response.toolbar?.exists ? 'hidden' : 'missing';
+            const fontState = response.fontAwesomeReady ? 'icons ready' : 'text fallback active';
+            const injectionState = response.mainWorldInjection?.lastError
+              ? `MAIN error: ${response.mainWorldInjection.lastError}`
+              : 'MAIN injection ready';
+            const accessState = response.wosHostKind === 'proxy'
+              ? persistentAccess ? 'proxy access saved' : 'temporary proxy access'
+              : 'official WOS host';
+            setStatus(
+              sidDisplay,
+              `${response.hostname}\nToolbar: ${toolbarState}; ${fontState}\n${injectionState}; ${accessState}`,
+              response.toolbar?.exists ? 'status--success' : 'status--error'
+            );
+          });
+        });
+      });
+    }
 
     const setPanelCollapsed = (bodyElement, toggleElement, storageKey, collapsed) => {
       if (!bodyElement || !toggleElement) return;

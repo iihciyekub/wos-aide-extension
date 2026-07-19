@@ -15,6 +15,7 @@ const config = merge(common, {
     injected: PATHS.src + '/injected.js',
     'z-Wos': PATHS.src + '/z-Wos.js',
     'z-Wos-loader': PATHS.src + '/z-Wos-loader.js',
+    'wos-proxy-marker': PATHS.src + '/wos-proxy-marker.js',
     'pub-fun': PATHS.src + '/pub-fun.js',
     'z-easyscholar': PATHS.src + '/z-easyscholar.js',
     'z-easyscholar-loader': PATHS.src + '/z-easyscholar-loader.js',

@@ -38,6 +38,7 @@ WOS Aide is a Chrome extension for Web of Science users. It helps streamline com
 - `*.isiknowledge.com` for legacy compatibility
 
 Institution-specific proxy hosts may require separate permission because their domains are controlled by the institution rather than Web of Science.
+Open the extension popup on the proxied WOS page and select `Diagnose WOS Page` to grant access to that exact HTTPS proxy origin and keep support enabled after refresh.
 
 ## Development
 
