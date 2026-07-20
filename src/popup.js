@@ -2,6 +2,7 @@
 
 import './popup.css';
 const { classifyWosHost } = require('./wos-host');
+const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
 
 (function() {
   const CHAT_API_KEY_STORAGE_KEY = 'wosOpenaiApiKey';
@@ -267,6 +268,12 @@ const { classifyWosHost } = require('./wos-host');
   };
 
   document.addEventListener('DOMContentLoaded', () => {
+    const wosQuickStatus = document.getElementById('wosQuickStatus');
+    const wosSidValue = document.getElementById('wosSidValue');
+    const refreshWosSidBtn = document.getElementById('refreshWosSidBtn');
+    const copyWosSidBtn = document.getElementById('copyWosSidBtn');
+    const openWosDoiSearchBtn = document.getElementById('openWosDoiSearchBtn');
+    const openWosUuidDownloadBtn = document.getElementById('openWosUuidDownloadBtn');
     const openaiSettingsToggle = document.getElementById('openaiSettingsToggle');
     const openaiSettingsBody = document.getElementById('openaiSettingsBody');
     const easyScholarSettingsToggle = document.getElementById('easyScholarSettingsToggle');
@@ -312,6 +319,122 @@ const { classifyWosHost } = require('./wos-host');
     const openDoiPdfDownloadBtn = document.getElementById('openDoiPdfDownloadBtn');
     const diagnoseWosBtn = document.getElementById('diagnoseWosBtn');
     const sidDisplay = document.getElementById('popupStatus');
+
+    let currentWosTab = null;
+    let currentPopupSid = '';
+
+    const setWosQuickStatus = (message, variant = 'status--muted') => {
+      setStatus(wosQuickStatus, message, variant);
+    };
+
+    const setWosQuickActionsEnabled = (enabled) => {
+      if (openWosDoiSearchBtn) openWosDoiSearchBtn.disabled = !enabled;
+      if (openWosUuidDownloadBtn) openWosUuidDownloadBtn.disabled = !enabled;
+      if (copyWosSidBtn) copyWosSidBtn.disabled = !currentPopupSid;
+    };
+
+    const getActiveTab = () => new Promise(resolve => withActiveTab(resolve));
+
+    const readCurrentSidFromTab = (tabId) => new Promise((resolve) => {
+      chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: resolveWosSidInMainWorld
+      }, results => {
+        if (chrome.runtime.lastError) {
+          resolve({ sid: '', error: chrome.runtime.lastError.message });
+          return;
+        }
+        resolve({ sid: String(results?.[0]?.result || '').trim(), error: '' });
+      });
+    });
+
+    const refreshPopupSid = async () => {
+      if (refreshWosSidBtn) {
+        refreshWosSidBtn.disabled = true;
+        refreshWosSidBtn.querySelector('i')?.classList.add('fa-spin');
+      }
+      currentPopupSid = '';
+      if (wosSidValue) wosSidValue.value = '';
+      setWosQuickActionsEnabled(false);
+      setWosQuickStatus('Connecting to the current WOS page...', 'status--info');
+
+      const tab = await getActiveTab();
+      currentWosTab = tab;
+      if (!tab?.id) {
+        setWosQuickStatus('No active browser tab was found.', 'status--error');
+      } else {
+        let lastError = '';
+        const retryDelays = [0, 150, 400];
+        for (const delay of retryDelays) {
+          if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+          const result = await readCurrentSidFromTab(tab.id);
+          if (result.sid) {
+            currentPopupSid = result.sid;
+            if (wosSidValue) wosSidValue.value = result.sid;
+            setWosQuickActionsEnabled(true);
+            setWosQuickStatus('Current SID ready. DOI and UUID tools are available.', 'status--success');
+            break;
+          }
+          lastError = result.error || lastError;
+        }
+        if (!currentPopupSid) {
+          setWosQuickStatus(
+            lastError ? `WOS connection failed: ${lastError}` : 'No active SID found. Refresh or sign in to WOS first.',
+            'status--error'
+          );
+        }
+      }
+
+      if (refreshWosSidBtn) {
+        refreshWosSidBtn.disabled = false;
+        refreshWosSidBtn.querySelector('i')?.classList.remove('fa-spin');
+      }
+    };
+
+    const openWosQuickTool = async (preferredTab, label) => {
+      const tab = currentWosTab?.id ? currentWosTab : await getActiveTab();
+      if (!tab?.id) {
+        setWosQuickStatus('No active WOS tab was found.', 'status--error');
+        return;
+      }
+      setWosQuickStatus(`Opening ${label}...`, 'status--info');
+      sendMessageToTabWithBootstrap(
+        tab.id,
+        { type: 'OPEN_WOS_DOI_QUERY', preferredTab, forceOpen: true },
+        (error, response) => {
+          if (error || !response?.success) {
+            setWosQuickStatus(error?.message || response?.error || `Failed to open ${label}.`, 'status--error');
+            return;
+          }
+          setWosQuickStatus(`${label} opened on the WOS page.`, 'status--success');
+          window.setTimeout(() => window.close(), 120);
+        }
+      );
+    };
+
+    refreshWosSidBtn?.addEventListener('click', refreshPopupSid);
+    copyWosSidBtn?.addEventListener('click', async () => {
+      if (!currentPopupSid) {
+        await refreshPopupSid();
+      }
+      if (!currentPopupSid) return;
+      try {
+        await navigator.clipboard.writeText(currentPopupSid);
+        setWosQuickStatus('Current SID copied.', 'status--success');
+        const icon = copyWosSidBtn.querySelector('i');
+        if (icon) icon.className = 'fa-solid fa-check';
+        window.setTimeout(() => {
+          if (icon) icon.className = 'fa-regular fa-copy';
+        }, 1200);
+      } catch (error) {
+        setWosQuickStatus('SID found, but clipboard copy failed.', 'status--error');
+      }
+    });
+    openWosDoiSearchBtn?.addEventListener('click', () => openWosQuickTool('query', 'DOI Search'));
+    openWosUuidDownloadBtn?.addEventListener('click', () => openWosQuickTool('export', 'UUID Download'));
+
+    refreshPopupSid();
 
     // 新增：DOI列表显示区域和清空按钮
 

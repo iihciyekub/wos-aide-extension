@@ -8,6 +8,33 @@
 </head>
 <body>
   <div class="app">
+    <div class="panel wos-quick-panel" id="wosQuickPanel">
+      <div class="wos-quick-header">
+        <div>
+          <div class="panel-title">WOS Quick Actions</div>
+          <div id="wosQuickStatus" class="helper status--info" role="status">Connecting to the current WOS page...</div>
+        </div>
+        <button id="refreshWosSidBtn" class="icon-button" title="Refresh current SID" aria-label="Refresh current SID">
+          <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="wos-sid-row">
+        <input id="wosSidValue" type="text" readonly placeholder="Current SID" aria-label="Current WOS SID" />
+        <button id="copyWosSidBtn" class="icon-button" title="Copy current SID" aria-label="Copy current SID" disabled>
+          <i class="fa-regular fa-copy" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="wos-quick-actions">
+        <button id="openWosDoiSearchBtn" class="button" disabled>
+          <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+          <span class="button-label">DOI Search</span>
+        </button>
+        <button id="openWosUuidDownloadBtn" class="button" disabled>
+          <i class="fa-solid fa-file-arrow-down" aria-hidden="true"></i>
+          <span class="button-label">UUID Download</span>
+        </button>
+      </div>
+    </div>
     <div class="panel panel--collapsible" id="openaiSettingsPanel">
       <button class="panel-header" id="openaiSettingsToggle" aria-expanded="true">
         <span class="panel-title">LLM Settings</span>

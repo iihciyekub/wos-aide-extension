@@ -81,6 +81,65 @@ body {
     gap: 6px;
 }
 
+.wos-quick-panel {
+    gap: 10px;
+}
+
+.wos-quick-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.wos-quick-header .helper {
+    margin-top: 4px;
+    line-height: 1.35;
+}
+
+.wos-sid-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 34px;
+    gap: 6px;
+    align-items: center;
+}
+
+.wos-sid-row input {
+    width: 100%;
+    height: 32px;
+    border: 1px solid rgba(50, 42, 32, 0.2);
+    border-radius: 8px;
+    padding: 0 9px;
+    background: rgba(255, 255, 255, 0.84);
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+}
+
+.wos-sid-row input:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(43, 92, 138, 0.24);
+}
+
+.wos-quick-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.wos-quick-actions .button {
+    justify-content: center;
+    padding: 8px 6px;
+}
+
+.wos-quick-actions .button:disabled,
+.wos-sid-row .icon-button:disabled,
+.wos-quick-header .icon-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 .button {
     border: 1px solid rgba(50, 42, 32, 0.12);
     display: inline-flex;

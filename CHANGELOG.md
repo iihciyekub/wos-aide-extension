@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.18 - 2026-07-20
+
+### Added
+- Added a WOS Quick Actions card to the popup that automatically retrieves the active tab's SID and opens DOI Search or UUID Download directly.
+
+### Changed
+- Made popup DOI and UUID actions force-open the requested WOS tool tab instead of only restoring the page toolbar.
+
 ## 0.1.17 - 2026-07-20
 
 ### Fixed

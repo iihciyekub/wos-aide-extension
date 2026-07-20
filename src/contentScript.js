@@ -1234,7 +1234,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
     const toolbarShortcutsReady = ensureWosToolbarShortcutsReady();
-    if (toolbarShortcutsReady) {
+    if (toolbarShortcutsReady && !request.forceOpen) {
       sendResponse({
         success: true,
         visible: false,
