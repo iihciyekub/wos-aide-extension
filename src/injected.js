@@ -1,3 +1,5 @@
+const { resolveWosSid } = require('./wos-sid');
+
 (function() {
   'use strict';
 
@@ -136,9 +138,7 @@
 
   document.addEventListener('__WOS_AIDE_GET_SID_INFO__', (event) => {
     const requestId = event?.detail?.requestId;
-    const sidFromPage = String(window?.wos?.SID || window?.sessionData?.BasicProperties?.SID || '').trim();
-    const sidFromUrl = String(new URL(window.location.href).searchParams.get('SID') || new URL(window.location.href).searchParams.get('sid') || '').trim();
-    const sid = sidFromPage || sidFromUrl;
+    const sid = resolveWosSid();
 
     document.dispatchEvent(new CustomEvent('__WOS_AIDE_GET_SID_INFO_RESPONSE__', {
       detail: {

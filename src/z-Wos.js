@@ -1,6 +1,8 @@
 /** 
  * core code
 */
+const { resolveWosSid } = require('./wos-sid');
+
 const $ = window.jQuery || window.$;
 if ($) {
     window.jQuery = window.$ = $;
@@ -427,19 +429,6 @@ const asy_webWait = new WebWait();
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 class WosInfo {
     static instance = null;
     constructor() {
@@ -448,7 +437,7 @@ class WosInfo {
     }
 
     get SID() {
-        return window.sessionData.BasicProperties.SID || '';
+        return resolveWosSid();
     }
 
 }
@@ -876,7 +865,7 @@ class WosUT {
                     'sec-fetch-mode': 'cors',
                     'sec-fetch-site': 'same-origin',
                     'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
-                    'x-1p-wos-sid': window.sessionData.BasicProperties.SID,
+                    'x-1p-wos-sid': asy_wosInfo.SID,
                     'cookie': document.cookie
                 },
                 body: JSON.stringify(jsondata)
@@ -1491,7 +1480,7 @@ class WosUUID {
                     'sec-fetch-mode': 'cors',
                     'sec-fetch-site': 'same-origin',
                     'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
-                    'x-1p-wos-sid': window.sessionData.BasicProperties.SID,
+                    'x-1p-wos-sid': asy_wosInfo.SID,
                     'cookie': window.document.cookie
                 },
                 body: JSON.stringify(josndata)
@@ -1660,7 +1649,7 @@ class WosUUID {
                     'sec-fetch-mode': 'cors',
                     'sec-fetch-site': 'same-origin',
                     'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
-                    'x-1p-wos-sid': window.sessionData.BasicProperties.SID,
+                    'x-1p-wos-sid': asy_wosInfo.SID,
                     'cookie': document.cookie
                 },
                 body: JSON.stringify(jsondata)
@@ -1715,7 +1704,7 @@ class WosUUID {
                     'sec-fetch-mode': 'cors',
                     'sec-fetch-site': 'same-origin',
                     'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
-                    'x-1p-wos-sid': window.sessionData.BasicProperties.SID,
+                    'x-1p-wos-sid': asy_wosInfo.SID,
                     'cookie': document.cookie
                 },
                 body: JSON.stringify(jsondata)
@@ -2817,7 +2806,7 @@ class WosQuery {
                     'origin': window.location.origin,
                     'pragma': 'no-cache',
                     'priority': 'u=1, i',
-                    'x-1p-wos-sid': window.sessionData.BasicProperties.SID,
+                    'x-1p-wos-sid': asy_wosInfo.SID,
                 },
                 body: JSON.stringify({
                     "userQuery": text,

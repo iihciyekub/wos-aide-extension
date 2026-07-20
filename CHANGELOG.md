@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.16 - 2026-07-20
+
+### Fixed
+- Refreshed the current Web of Science SID every time it is copied or used by an internal API request instead of relying on a cached value.
+- Recovered the SID from the current WoS bootstrap script when the page removes `window.sessionData` after application startup.
+- Corrected the WOS helper SID path and prevented API requests from failing when `sessionData` is unavailable.
+
 ## 0.1.15 - 2026-07-19
 
 ### Added

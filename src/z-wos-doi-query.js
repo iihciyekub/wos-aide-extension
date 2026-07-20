@@ -1,3 +1,5 @@
+const { resolveWosSid } = require('./wos-sid');
+
 // 导出 WOS Plain Text 到控制台（不下载文件）
 async function exportWosPlainTextToConsole() {
     try {
@@ -436,7 +438,7 @@ window.wosids = [];
     let copySidRestoreTimer = null;
 
     copySidBtn.onclick = async () => {
-        const sid = String(window?.wos?.SID || window?.sessionData?.BasicProperties?.SID || '').trim();
+        const sid = resolveWosSid();
         if (!sid) {
             alert('SID not found on current page.');
             return;
