@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.17 - 2026-07-20
+
+### Fixed
+- Read the current SID directly from the active WoS tab's MAIN world on every toolbar action, with bounded retries and the legacy page bridge as a fallback.
+- Removed the SID toolbar's dependency on a one-time helper-listener injection and distinguished SID lookup failures from clipboard failures in its feedback.
+- Prevented repeated fallback injections from registering duplicate SID bridge listeners.
+
 ## 0.1.16 - 2026-07-20
 
 ### Fixed

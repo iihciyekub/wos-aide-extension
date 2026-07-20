@@ -347,14 +347,14 @@ const ensurePageFontAwesome = () => {
   return fontAwesomeReadyPromise;
 };
 
-const getWosSidInfo = () => new Promise((resolve) => {
+const getWosSidInfoFromPageBridge = () => new Promise((resolve) => {
   const requestId = `sid-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const timeoutId = window.setTimeout(() => {
     document.removeEventListener(GET_WOS_SID_INFO_RESPONSE_EVENT, handleResponse);
     resolve({
       sid: ''
     });
-  }, 800);
+  }, 1500);
 
   const handleResponse = (event) => {
     if (event?.detail?.requestId !== requestId) {
@@ -373,6 +373,58 @@ const getWosSidInfo = () => new Promise((resolve) => {
     detail: { requestId }
   }));
 });
+
+const requestCurrentWosSid = (timeoutMs = 1500) => new Promise((resolve) => {
+  let settled = false;
+  const finish = (sid = '', error = '') => {
+    if (settled) return;
+    settled = true;
+    window.clearTimeout(timeoutId);
+    resolve({ sid: String(sid || '').trim(), error: String(error || '') });
+  };
+  const timeoutId = window.setTimeout(() => finish('', 'SID request timed out'), timeoutMs);
+
+  try {
+    chrome.runtime.sendMessage({ type: 'GET_CURRENT_WOS_SID' }, response => {
+      if (chrome.runtime.lastError) {
+        finish('', chrome.runtime.lastError.message);
+        return;
+      }
+      finish(response?.sid, response?.error);
+    });
+  } catch (error) {
+    finish('', error?.message || String(error));
+  }
+});
+
+const getWosSidInfo = async () => {
+  const retryDelays = [0, 120, 350];
+  let lastError = '';
+  for (const delay of retryDelays) {
+    if (delay) {
+      await new Promise(resolve => window.setTimeout(resolve, delay));
+    }
+    const result = await requestCurrentWosSid();
+    if (result.sid) {
+      return { sid: result.sid, source: 'main-world' };
+    }
+    lastError = result.error || lastError;
+  }
+
+  // Retain the original bridge as a compatibility fallback for browsers where
+  // a one-shot MAIN-world execution is temporarily unavailable.
+  try {
+    await injectMainWorldFiles(['injected.js']);
+  } catch (error) {
+    lastError = error?.message || String(error);
+  }
+  const fallback = await getWosSidInfoFromPageBridge();
+  return {
+    sid: fallback.sid,
+    source: fallback.sid ? 'page-bridge' : '',
+    error: fallback.sid ? '' : lastError
+  };
+};
 
 const copyTextToClipboard = async (text) => {
   const normalizedText = String(text || '');
@@ -409,14 +461,37 @@ const copyTextToClipboard = async (text) => {
 const copyWosSidFromToolbar = async (button) => {
   if (button.dataset.copying === 'true') return;
   button.dataset.copying = 'true';
-  const { sid } = await getWosSidInfo();
+  button.innerHTML = getToolbarIconMarkup(
+    '<i class="fa-solid fa-spinner fa-spin wos-aide-toolbar-icon" aria-hidden="true"></i>',
+    '...'
+  );
+  button.title = 'Getting current SID...';
+  button.setAttribute('aria-label', button.title);
+  const { sid, source, error } = await getWosSidInfo();
   const copied = Boolean(sid) && await copyTextToClipboard(sid);
 
   button.innerHTML = copied
     ? getToolbarIconMarkup('<i class="fa-solid fa-check wos-aide-toolbar-icon" aria-hidden="true"></i>', 'OK')
-    : getToolbarIconMarkup('<i class="fa-solid fa-xmark wos-aide-toolbar-icon" aria-hidden="true"></i>', 'ERR');
-  button.title = copied ? 'SID copied' : (sid ? 'SID copy failed' : 'SID not found');
+    : sid
+      ? getToolbarIconMarkup('<i class="fa-solid fa-clipboard-question wos-aide-toolbar-icon" aria-hidden="true"></i>', 'COPY')
+      : getToolbarIconMarkup('<i class="fa-solid fa-triangle-exclamation wos-aide-toolbar-icon" aria-hidden="true"></i>', 'NO SID');
+  button.title = copied
+    ? 'Current SID copied'
+    : (sid ? 'SID found, but clipboard copy failed' : 'Current SID not found after retries');
   button.setAttribute('aria-label', button.title);
+  button.dataset.sidStatus = copied ? 'copied' : (sid ? 'copy-failed' : 'not-found');
+  if (source) {
+    button.dataset.sidSource = source;
+  } else {
+    delete button.dataset.sidSource;
+  }
+  if (!copied) {
+    console.warn('[WOS Aide] SID action failed:', {
+      status: button.dataset.sidStatus,
+      source: source || 'none',
+      error: error || ''
+    });
+  }
   button.classList.toggle('is-copy-success', copied);
   button.classList.toggle('is-copy-error', !copied);
   delete button.dataset.copying;
@@ -435,7 +510,9 @@ const copyWosSidFromToolbar = async (button) => {
     currentButton.setAttribute('aria-label', 'SID Info');
     currentButton.classList.remove('is-copy-success', 'is-copy-error');
     delete currentButton.dataset.copying;
-  }, 1200);
+    delete currentButton.dataset.sidStatus;
+    delete currentButton.dataset.sidSource;
+  }, 2500);
 };
 
 const renderWosToolbarShortcutButtons = (shortcutsWrap) => {

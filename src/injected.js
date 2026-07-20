@@ -136,17 +136,20 @@ const { resolveWosSid } = require('./wos-sid');
     return await window.copyFileToClipboard(fileInfo.path);
   };
 
-  document.addEventListener('__WOS_AIDE_GET_SID_INFO__', (event) => {
-    const requestId = event?.detail?.requestId;
-    const sid = resolveWosSid();
+  if (!globalThis.__WOS_AIDE_SID_BRIDGE_READY__) {
+    globalThis.__WOS_AIDE_SID_BRIDGE_READY__ = true;
+    document.addEventListener('__WOS_AIDE_GET_SID_INFO__', (event) => {
+      const requestId = event?.detail?.requestId;
+      const sid = resolveWosSid();
 
-    document.dispatchEvent(new CustomEvent('__WOS_AIDE_GET_SID_INFO_RESPONSE__', {
-      detail: {
-        requestId,
-        sid
-      }
-    }));
-  });
+      document.dispatchEvent(new CustomEvent('__WOS_AIDE_GET_SID_INFO_RESPONSE__', {
+        detail: {
+          requestId,
+          sid
+        }
+      }));
+    });
+  }
 
   // ========== WOS Aide Project ==========
   document.addEventListener('__GET_WOS_AIDE_PROJECT__', () => {

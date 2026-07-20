@@ -1,5 +1,7 @@
 'use strict';
 
+const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
+
 // With background scripts you can communicate with popup
 // and contentScript files.
 // For more information on background script,
@@ -365,6 +367,28 @@ async function readFileContent(fileHandle) {
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'GET_CURRENT_WOS_SID') {
+    (async () => {
+      const tabId = sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null;
+      if (!tabId) {
+        sendResponse({ success: false, sid: '', error: 'No sender tab is available.' });
+        return;
+      }
+      try {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId },
+          world: 'MAIN',
+          func: resolveWosSidInMainWorld
+        });
+        const sid = String(results?.[0]?.result || '').trim();
+        sendResponse({ success: Boolean(sid), sid });
+      } catch (error) {
+        sendResponse({ success: false, sid: '', error: error?.message || String(error) });
+      }
+    })();
+    return true;
+  }
+
   if (request.type === 'INJECT_MAIN_WORLD_FILES') {
     (async () => {
       const allowedFiles = new Set([

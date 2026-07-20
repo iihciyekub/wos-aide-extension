@@ -16,6 +16,9 @@ test('WOS page scripts use native MAIN-world injection instead of script tags', 
   assert.match(contentScript, /INJECT_MAIN_WORLD_FILES/);
   assert.match(loader, /INJECT_MAIN_WORLD_FILES/);
   assert.match(background, /world:\s*'MAIN'/);
+  assert.match(background, /GET_CURRENT_WOS_SID/);
+  assert.match(background, /func:\s*resolveWosSidInMainWorld/);
+  assert.match(contentScript, /retryDelays\s*=\s*\[0, 120, 350\]/);
   assert.doesNotMatch(contentScript, /createElement\(['"]script['"]\)/);
   assert.doesNotMatch(loader, /createElement\(['"]script['"]\)/);
 });
