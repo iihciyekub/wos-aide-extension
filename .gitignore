@@ -1,22 +1,45 @@
+# Dependencies
 node_modules/
+
+# Build and release artifacts
 build/
-build.crx
-build.pem
+dist/
+release/
+*.crx
+*.pem
 
-.DS_Store
-Thumbs.db
+# Local environment and secrets
+.env
+.env.*
+!.env.example
 
+# Local WOS Aide research data
+wosaide-studies/
+
+# Test output and tool caches
+coverage/
+.nyc_output/
+.cache/
+.parcel-cache/
+.webpack/
+
+# Logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-coverage/
-dist/
-release/
-
+# Editors
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
 
-Users:.fileloc
+# Operating system metadata
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+*.fileloc
