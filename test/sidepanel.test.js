@@ -20,7 +20,13 @@ test('extension action opens the native Chrome side panel', () => {
   assert.ok(manifest.permissions.includes('sidePanel'));
   assert.ok(manifest.permissions.includes('downloads'));
   assert.ok(manifest.permissions.includes('debugger'));
-  assert.ok(manifest.host_permissions.includes('https://www.webofscience.com/*'));
+  assert.deepEqual(manifest.host_permissions, ['http://*/*', 'https://*/*']);
+  const generalScripts = manifest.content_scripts.filter(item => item.js.includes('contentScript.js'));
+  assert.equal(generalScripts.length, 1);
+  assert.deepEqual(generalScripts[0].matches, ['http://*/*', 'https://*/*']);
+  const wosLoader = manifest.content_scripts.find(item => item.js.includes('z-Wos-loader.js'));
+  assert.ok(wosLoader.matches.includes('https://www.webofscience.com/*'));
+  assert.ok(!wosLoader.matches.includes('https://*/*'));
   assert.match(background, /openPanelOnActionClick:\s*true/);
   assert.match(sidepanelHtml, /id="downloadBtn"/);
   assert.doesNotMatch(sidepanelHtml, /id="nativeDownloadBtn"/);
@@ -28,6 +34,9 @@ test('extension action opens the native Chrome side panel', () => {
   assert.match(sidepanelHtml, /id="folderPermission"/);
   assert.match(sidepanelHtml, /id="downloadIntervalSeconds"/);
   assert.match(sidepanelHtml, /id="skipExistingPdfs"/);
+  assert.match(sidepanelHtml, />CNKI Overseas Login<\/a>/);
+  assert.match(sidepanelHtml, /fsso\.oversea\.cnki\.net\/login_en\.aspx\?lang=zh-TW&amp;returnUrl=https%3A%2F%2Ftra\.oversea\.cnki\.net%2Fkns%3Fdbcode%3DCFLQ/);
+  assert.match(sidepanelHtml, /title="CNKI Overseas Login"/);
   assert.match(sidepanelHtml, /id="doiBatchHost"/);
   assert.match(sidepanelHtml, /role="tablist"/);
   assert.doesNotMatch(sidepanelHtml, /openSettingsBtn|popup\.html/);
@@ -40,6 +49,7 @@ test('side panel performs CNKI page-click downloads with selected-folder dedupli
   assert.match(sidepanel, /GET_CNKI_PDF_LINKS/);
   assert.match(sidepanel, /world:\s*'MAIN'/);
   assert.match(sidepanel, /triggerCnkiTrustedDownload/);
+  assert.match(sidepanel, /captureCnkiPdfWithTrustedClick/);
   assert.match(sidepanel, /Input\.dispatchMouseEvent/);
   assert.match(sidepanel, /waitForChromeDownloadCompletion/);
   assert.match(sidepanel, /Clicking CNKI PDF icons in the logged-in page/);
@@ -54,6 +64,6 @@ test('side panel performs CNKI page-click downloads with selected-folder dedupli
   assert.doesNotMatch(sidepanel, /verificationVisible|verificationWarning/);
   assert.doesNotMatch(sidepanelHtml, /security verification/i);
   assert.match(sidepanelHtml, /Download PDFs/);
-  assert.match(sidepanelHtml, /Downloads always use CNKI page clicks/);
+  assert.match(sidepanelHtml, /authenticated page-click responses are captured and written there/);
   assert.match(sidepanel, /require\('\.\/z-doi-pdf-download'\)/);
 });

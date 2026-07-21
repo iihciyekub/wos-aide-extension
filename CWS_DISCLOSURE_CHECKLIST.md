@@ -25,7 +25,7 @@ WOS Aide may handle:
 
 Suggested answer:
 
-- The extension helps users perform Web of Science query building, journal lookup, DOI handling, and related research workflow tasks.
+- The extension provides browser-based research helpers, including DOI handling and specialized Web of Science and CNKI workflows.
 
 ### Data Collection
 
@@ -41,10 +41,10 @@ Most likely applicable:
   Usually `No`, unless you consider free-form query text as user content in a way the form explicitly classifies there.
 
 - Website content:
-  `Yes`, because the extension reads page content on supported sites to provide workflow features.
+  `Yes`, because the general content script can read the current HTTP or HTTPS page to provide user-requested workflow features.
 
 - User activity:
-  `Yes`, in a limited functional sense, because the extension reacts to user actions on supported pages.
+  `Yes`, in a limited functional sense, because the extension reacts to user actions on ordinary web pages.
 
 - Authentication information:
   `Yes`, because user-provided API keys are stored locally and used to authenticate requests.

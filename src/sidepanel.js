@@ -254,24 +254,125 @@ initializeLlmSidePanelChat();
     });
   });
 
+  const dispatchTrustedMouseClick = async (target, point) => {
+    await sendDebuggerCommand(target, 'Input.dispatchMouseEvent', {
+      type: 'mouseMoved', x: point.x, y: point.y, button: 'none'
+    });
+    await sendDebuggerCommand(target, 'Input.dispatchMouseEvent', {
+      type: 'mousePressed', x: point.x, y: point.y, button: 'left', buttons: 1, clickCount: 1
+    });
+    await sendDebuggerCommand(target, 'Input.dispatchMouseEvent', {
+      type: 'mouseReleased', x: point.x, y: point.y, button: 'left', buttons: 0, clickCount: 1
+    });
+  };
+
   const triggerCnkiTrustedDownload = async (tabId, link) => {
     const point = await locateCnkiDownloadTarget(tabId, link);
     if (!point?.success) return point;
     const target = { tabId };
     await attachDebugger(target);
     try {
-      await sendDebuggerCommand(target, 'Input.dispatchMouseEvent', {
-        type: 'mouseMoved', x: point.x, y: point.y, button: 'none'
-      });
-      await sendDebuggerCommand(target, 'Input.dispatchMouseEvent', {
-        type: 'mousePressed', x: point.x, y: point.y, button: 'left', buttons: 1, clickCount: 1
-      });
-      await sendDebuggerCommand(target, 'Input.dispatchMouseEvent', {
-        type: 'mouseReleased', x: point.x, y: point.y, button: 'left', buttons: 0, clickCount: 1
-      });
+      await dispatchTrustedMouseClick(target, point);
       await new Promise(resolve => window.setTimeout(resolve, 150));
       return { success: true, method: 'trusted-browser-input', position: point.position };
     } finally {
+      await detachDebugger(target);
+    }
+  };
+
+  const responseHeaderValue = (headers, name) => {
+    const expected = String(name || '').toLowerCase();
+    return String((headers || []).find(header => String(header.name || '').toLowerCase() === expected)?.value || '');
+  };
+
+  const waitForInterceptedCnkiPdf = (target, signal) => new Promise((resolve, reject) => {
+    let timer = null;
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      chrome.debugger.onEvent.removeListener(onEvent);
+    };
+    const finish = (callback, value) => {
+      cleanup();
+      callback(value);
+    };
+    const onAbort = () => finish(reject, new DOMException('Download stopped', 'AbortError'));
+    const onEvent = (source, method, params) => {
+      if (source.tabId !== target.tabId || method !== 'Fetch.requestPaused' || !params.responseStatusCode) return;
+      const contentType = responseHeaderValue(params.responseHeaders, 'content-type');
+      const contentDisposition = responseHeaderValue(params.responseHeaders, 'content-disposition');
+      const redirect = params.responseStatusCode >= 300 && params.responseStatusCode < 400;
+      const pdfResponse = !redirect && (
+        /application\/pdf|application\/octet-stream/i.test(contentType)
+        || /attachment/i.test(contentDisposition)
+      );
+      if (pdfResponse) {
+        finish(resolve, { ...params, contentType, contentDisposition });
+        return;
+      }
+      void sendDebuggerCommand(target, 'Fetch.continueRequest', { requestId: params.requestId }).catch(error => {
+        finish(reject, error);
+      });
+    };
+    chrome.debugger.onEvent.addListener(onEvent);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    timer = window.setTimeout(() => {
+      finish(reject, new Error('The trusted CNKI click did not produce an interceptable PDF response within 30 seconds.'));
+    }, 30000);
+  });
+
+  const readDebuggerStream = async (target, handle, signal) => {
+    const chunks = [];
+    try {
+      while (true) {
+        if (signal?.aborted) throw new DOMException('Download stopped', 'AbortError');
+        const part = await sendDebuggerCommand(target, 'IO.read', { handle, size: 256 * 1024 });
+        const binary = part.base64Encoded ? atob(part.data || '') : part.data || '';
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+        if (bytes.length) chunks.push(bytes);
+        if (part.eof) break;
+      }
+      return chunks;
+    } finally {
+      await sendDebuggerCommand(target, 'IO.close', { handle }).catch(() => {});
+    }
+  };
+
+  const captureCnkiPdfWithTrustedClick = async (tabId, link, signal) => {
+    const point = await locateCnkiDownloadTarget(tabId, link);
+    if (!point?.success) throw new Error(point?.error || 'The CNKI download control could not be located.');
+    const target = { tabId };
+    let paused = null;
+    await attachDebugger(target);
+    try {
+      await sendDebuggerCommand(target, 'Fetch.enable', {
+        patterns: [{ urlPattern: '*', requestStage: 'Response' }]
+      });
+      const intercepted = waitForInterceptedCnkiPdf(target, signal);
+      await dispatchTrustedMouseClick(target, point);
+      paused = await intercepted;
+      const { stream } = await sendDebuggerCommand(target, 'Fetch.takeResponseBodyAsStream', {
+        requestId: paused.requestId
+      });
+      const chunks = await readDebuggerStream(target, stream, signal);
+      const blob = new Blob(chunks, { type: paused.contentType || 'application/pdf' });
+      const validationError = await validatePdf(blob, paused.contentType);
+      if (validationError) throw new Error(validationError);
+      return {
+        blob,
+        finalUrl: paused.request?.url || link.url,
+        contentDisposition: paused.contentDisposition,
+        sourceLink: link
+      };
+    } finally {
+      if (paused?.requestId) {
+        await sendDebuggerCommand(target, 'Fetch.failRequest', {
+          requestId: paused.requestId,
+          errorReason: 'Aborted'
+        }).catch(() => {});
+      }
+      await sendDebuggerCommand(target, 'Fetch.disable', {}).catch(() => {});
       await detachDebugger(target);
     }
   };
@@ -756,7 +857,7 @@ initializeLlmSidePanelChat();
         ...(Array.isArray(record.duplicateSourceUrls) ? record.duplicateSourceUrls : [])
       ]).filter(Boolean));
       if (synchronized.duplicateCount) log(`Folder index contains ${synchronized.duplicateCount} duplicate PDF file(s).`);
-      setStatus(`Transferring ${currentLinks.length} PDF(s) from the logged-in CNKI page…`, 'info');
+      setStatus(`Capturing ${currentLinks.length} authenticated page-click PDF(s) into the selected folder…`, 'info');
       for (const link of currentLinks) {
         if (activeController.signal.aborted) break;
         try {
@@ -764,13 +865,10 @@ initializeLlmSidePanelChat();
             skipped += 1;
             log(`Skipped existing: ${link.title}`);
           } else {
-            const { blob, finalUrl, contentDisposition, sourceLink } = await fetchCnkiPdfWithRetry(
+            const { blob, finalUrl, contentDisposition, sourceLink } = await captureCnkiPdfWithTrustedClick(
               activeTab.id,
               link,
-              activeController.signal,
-              (attempt, error) => log(
-                `Retrying ${link.title} after attempt ${attempt}: ${error?.message || error}`
-              )
+              activeController.signal
             );
             const sourceUrl = sourceLink?.url || link.url;
             const sha256 = await sha256Hex(blob);
@@ -851,6 +949,11 @@ initializeLlmSidePanelChat();
     if (!directoryHandle) directoryHandle = await restoreDirectoryHandle();
     const directoryGranted = directoryHandle && await ensureDirectoryPermission(directoryHandle, true);
     if (directoryHandle) showDirectoryName(directoryHandle, directoryGranted);
+    if (directoryGranted) {
+      setStatus('Selected-folder mode: capturing authenticated page-click PDFs directly into that folder.', 'info');
+      await downloadCurrentPage();
+      return;
+    }
     activeController = new AbortController();
     setRunning(true);
     setProgress(0, currentLinks.length, `0/${currentLinks.length}`);

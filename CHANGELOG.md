@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.1.23 - 2026-07-21
+
+### Changed
+- Made the general extension content script available on every standard HTTP and HTTPS page, including publisher and institution proxy sites.
+- Replaced the previous site-by-site host permission list with broad HTTP/HTTPS access so supported workflows no longer require repeated origin grants.
+- Kept the Web of Science startup loader restricted to WOS-compatible hosts so site-specific page code is not injected elsewhere.
+
+## 0.1.22 - 2026-07-21
+
+### Added
+- Added a `CNKI Overseas Login` link to the CNKI side-panel toolbar.
+
+### Fixed
+- Made selected-folder CNKI downloads preserve the working trusted page click while intercepting the authenticated PDF response through CDP Fetch streaming.
+- Wrote intercepted PDF bytes directly to the File System Access directory handle, retaining validation, SHA-256 deduplication, and index updates.
+- Kept ordinary Chrome native downloads as the no-folder fallback.
+
 ## 0.1.21 - 2026-07-21
 
 ### Fixed

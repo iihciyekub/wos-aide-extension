@@ -4,11 +4,11 @@
 
 ### English
 
-Research workflow helper for Web of Science, including DOI tools, WOS query generation, and journal lookup.
+Browser research helper with DOI tools and specialized Web of Science and CNKI workflows.
 
 ### 中文
 
-面向 Web of Science 的科研工作流辅助工具，提供 DOI 处理、WOS 查询生成与期刊查询等功能。
+适用于普通网页的科研工作流辅助工具，提供 DOI 处理及 Web of Science、知网专用功能。
 
 ## Detailed Description
 
@@ -88,15 +88,13 @@ This extension helps researchers perform Web of Science query building, journal 
 
 `scripting`
 
-- Used to inject the extension UI and workflow tools into supported pages when needed.
+- Used to inject the extension UI and workflow helpers into ordinary web pages when needed.
 
 Host permissions:
 
-- `https://*.webofscience.com/*`: supported Web of Science pages
-- `*://*.webofknowledge.com/*` and `*://*.isiknowledge.com/*`: legacy Web of Science compatibility
-- `https://api.openai.com/*`: used only when the user selects OpenAI for WOS query generation
-- `https://www.easyscholar.cc/*`: used only for EasyScholar journal lookup
-- `http://127.0.0.1/*` and `http://localhost/*`: used only for a user-configured local LM Studio endpoint
+- `http://*/*` and `https://*/*`: allow general research and download helpers on publisher, institution proxy, and other ordinary web pages without repeated per-site permission prompts
+- Site-specific WOS, CNKI, and ChatGPT behavior remains gated by the current page URL
+- The same access covers user-requested OpenAI and EasyScholar calls and user-configured local LM Studio endpoints
 
 ### 中文
 
@@ -114,30 +112,28 @@ Host permissions:
 
 `scripting`
 
-- 用于在需要时向受支持页面注入扩展界面和工作流工具。
+- 用于在需要时向普通网页注入扩展界面和科研工作流辅助工具。
 
 主机权限：
 
-- `https://*.webofscience.com/*`：受支持的 Web of Science 页面
-- `*://*.webofknowledge.com/*` 与 `*://*.isiknowledge.com/*`：兼容旧版 Web of Science 入口
-- `https://api.openai.com/*`：仅在用户选择 OpenAI 生成 WOS 查询时使用
-- `https://www.easyscholar.cc/*`：仅用于 EasyScholar 期刊查询
-- `http://127.0.0.1/*` 与 `http://localhost/*`：仅用于用户自行配置的本地 LM Studio 接口
+- `http://*/*` 与 `https://*/*`：让科研和下载辅助功能可在出版社、机构代理及其他普通网页运行，无需逐站点重复授权
+- WOS、知网与 ChatGPT 专用行为仍会根据当前页面地址启用
+- 同一权限也覆盖用户主动发起的 OpenAI、EasyScholar 请求和自行配置的本地 LM Studio 接口
 
 ## Reviewer Notes
 
 ### English
 
-- The extension primarily runs on Web of Science pages.
-- A lightweight helper also runs on ChatGPT pages for prompt quickload support.
+- The general content script is available on standard HTTP and HTTPS pages so research and download helpers work across publisher and proxy sites.
+- WOS, CNKI, and ChatGPT-specific behavior activates only on matching pages.
 - API keys are stored locally in Chrome extension storage.
 - External requests are sent only when the user explicitly uses OpenAI, EasyScholar, or LM Studio features.
 - Local directory access is user-initiated through the browser file picker.
 
 ### 中文
 
-- 扩展主要运行在 Web of Science 页面上。
-- 另有一个轻量辅助功能会运行在 ChatGPT 页面上，用于提示词快速加载。
+- 通用内容脚本可在普通 HTTP 和 HTTPS 页面运行，使科研和下载辅助功能适用于出版社及机构代理网站。
+- WOS、知网和 ChatGPT 专用行为只在匹配页面启用。
 - API Key 保存在 Chrome 扩展本地存储中。
 - 只有当用户主动使用 OpenAI、EasyScholar 或 LM Studio 功能时，才会发送外部请求。
 - 本地目录访问仅在用户通过浏览器文件选择器主动授权时发生。

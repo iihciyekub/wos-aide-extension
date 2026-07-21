@@ -2,11 +2,11 @@
 
 ## One-line Summary
 
-WOS Aide helps Web of Science users build queries, look up journal information, manage DOI workflows, and batch-handle related research tasks.
+WOS Aide provides browser-based research helpers, with specialized Web of Science and CNKI workflows.
 
 ## Detailed Description
 
-WOS Aide is a research workflow assistant for Web of Science users.
+WOS Aide is a browser-based research workflow assistant. General helpers are available on ordinary HTTP and HTTPS pages, while specialized features activate only on compatible Web of Science, CNKI, and ChatGPT pages.
 
 Core features:
 
@@ -47,27 +47,13 @@ Used so the extension can interact only with the tab the user is currently using
 
 ### scripting
 
-Used to inject the extension UI and tools into supported pages when needed.
+Used to inject the extension UI and workflow helpers into ordinary web pages when needed.
 
 ### Host permissions
 
-Supported Web of Science page access:
-
-- `https://*.webofscience.com/*`
-- `*://*.webofknowledge.com/*` for legacy compatibility
-- `*://*.isiknowledge.com/*` for legacy compatibility
-
-`https://api.openai.com/*`
-
-- Used only when the user selects OpenAI for WOS Query generation.
-
-`https://www.easyscholar.cc/*`
-
-- Used only when the user uses Journal Lookup with EasyScholar.
-
-`http://127.0.0.1/*` and `http://localhost/*`
-
-- Used only when the user configures a local LM Studio endpoint.
+- `http://*/*` and `https://*/*`: allow general research and download helpers on publisher, institution proxy, and other ordinary web pages without repeated per-site permission prompts.
+- Site-specific WOS, CNKI, and ChatGPT behavior remains gated by the current page URL.
+- The same access covers user-requested OpenAI and EasyScholar calls and user-configured local LM Studio endpoints.
 
 ## Single Purpose Statement
 
@@ -75,8 +61,8 @@ WOS Aide exists to help researchers perform Web of Science query building, journ
 
 ## Reviewer Notes
 
-- The extension primarily runs on Web of Science pages.
-- A lightweight helper also runs on ChatGPT pages only for prompt quickload support.
+- The general content script is available on standard HTTP and HTTPS pages so research and download helpers work across publisher and proxy sites.
+- WOS, CNKI, and ChatGPT-specific behavior activates only on matching pages.
 - The extension does not use a developer-operated backend.
 - User-entered API keys are stored locally in extension storage.
 - Requests to OpenAI, EasyScholar, or LM Studio happen only when the user explicitly uses those features.

@@ -36,9 +36,12 @@
       <section class="tab-panel is-active" id="cnkiPanel" role="tabpanel" aria-labelledby="tabCnki">
         <header class="section-toolbar">
           <span>Current-page downloader</span>
-          <button id="refreshPageBtn" class="icon-button" title="Rescan current tab" aria-label="Rescan current tab">
-            <i class="fa-solid fa-rotate" aria-hidden="true"></i>
-          </button>
+          <div class="section-toolbar-actions">
+            <a class="cnki-login-link" href="http://fsso.oversea.cnki.net/login_en.aspx?lang=zh-TW&amp;returnUrl=https%3A%2F%2Ftra.oversea.cnki.net%2Fkns%3Fdbcode%3DCFLQ" target="_blank" rel="noopener noreferrer" title="CNKI Overseas Login">CNKI Overseas Login</a>
+            <button id="refreshPageBtn" class="icon-button" title="Rescan current tab" aria-label="Rescan current tab">
+              <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+            </button>
+          </div>
         </header>
 
         <section class="summary-card">
@@ -78,7 +81,7 @@
             <i class="fa-solid fa-stop" aria-hidden="true"></i>
             <span>Stop</span>
           </button>
-          <p class="native-hint">Downloads always use CNKI page clicks and Chrome's download location. The selected folder is used only to check and index existing PDFs.</p>
+          <p class="native-hint">Selected folder: authenticated page-click responses are captured and written there. No folder: Chrome's normal download location is used.</p>
         </section>
 
         <section class="progress-card">

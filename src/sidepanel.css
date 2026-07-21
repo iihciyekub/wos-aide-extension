@@ -41,6 +41,9 @@ button { font: inherit; }
 .tab-panel { display: flex; flex-direction: column; gap: 8px; }
 .tab-panel[hidden] { display: none; }
 .section-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 0 2px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.section-toolbar-actions { display: flex; min-width: 0; align-items: center; gap: 7px; }
+.cnki-login-link { overflow: hidden; max-width: 145px; color: var(--text); font-size: 10px; font-weight: 600; text-decoration: underline; text-overflow: ellipsis; white-space: nowrap; }
+.cnki-login-link:hover { color: #000; }
 
 .summary-card, .action-card, .progress-card { padding: 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); }
 .status { min-height: 17px; margin-bottom: 8px; overflow-wrap: anywhere; }
@@ -166,6 +169,7 @@ body[data-surface="sidepanel"] .button { min-height: 34px; }
 #doiBatchHost [style*="2px dashed"] { border: 1px dashed #999 !important; }
 
 @media (max-width: 340px) {
+  .cnki-login-link { max-width: 112px; }
   .metric-row, .action-card { grid-template-columns: 1fr; }
   .native-hint { grid-column: 1; }
   .tab-button span { font-size: 9px; }

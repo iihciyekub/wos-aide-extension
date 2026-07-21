@@ -1,10 +1,10 @@
 # WOS Aide Privacy Policy
 
-Last updated: July 13, 2026
+Last updated: July 21, 2026
 
 ## Overview
 
-WOS Aide is a Chrome extension designed to assist research workflows on Web of Science and related pages. This extension stores user settings locally in the browser and sends user-requested query content only to the external services needed to fulfill the selected feature.
+WOS Aide is a Chrome extension designed to assist browser-based research workflows. Its general page helpers can run on standard HTTP and HTTPS pages, while site-specific features activate only on compatible services such as Web of Science and CNKI. This extension stores user settings locally in the browser and sends user-requested query content only to the external services needed to fulfill the selected feature.
 
 ## Data We Store
 
@@ -85,7 +85,8 @@ WOS Aide requests only the permissions needed for its functionality:
 
 Host permissions are used only for:
 
-- Supported Web of Science pages on `webofscience.com` and legacy-compatible `webofknowledge.com` or `isiknowledge.com` hosts
+- Running general research and download helpers on standard HTTP and HTTPS pages, including publisher and institution proxy sites
+- Running site-specific features only when the current page is a compatible Web of Science, CNKI, or ChatGPT page
 - OpenAI API requests
 - EasyScholar API requests
 - User-configured local LM Studio endpoints

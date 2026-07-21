@@ -1,11 +1,11 @@
 # <img src="public/icons/icon_48.png" width="45" align="left"> WOS Aide
 
-WOS Aide is a Chrome extension for Web of Science users. It helps streamline common WOS workflows on WoS, including query building, batch searching, metadata export, and PDF download support.
+WOS Aide is a Chrome extension for research workflows. Its general page helpers are available on any standard HTTP or HTTPS page, while specialized tools support Web of Science and CNKI workflows such as query building, batch searching, metadata export, and PDF downloads.
 
 ## What It Does
 
 - Open a floating Batch Query panel directly on Web of Science pages
-- Show an independent horizontal shortcut toolbar at the top center of supported pages
+- Show an independent horizontal shortcut toolbar at the top center of compatible pages
 - Build and run WoS queries with OpenAI or LM Studio
 - Run DOI-based and journal-based lookup workflows
 - Export WoS records in TXT or BIB format
@@ -31,14 +31,17 @@ WOS Aide is a Chrome extension for Web of Science users. It helps streamline com
   - LM Studio local endpoint
   - EasyScholar API key
 
-## Supported Web of Science Hosts
+## Supported Pages
+
+The general extension content script is available on all standard `http://` and `https://` pages, including publisher sites and institution proxy pages. Chrome-internal pages such as `chrome://` cannot be accessed by extensions.
+
+Specialized Web of Science startup integration remains limited to:
 
 - `*.webofscience.com`
 - `*.webofknowledge.com` for legacy compatibility
 - `*.isiknowledge.com` for legacy compatibility
 
-Institution-specific proxy hosts may require separate permission because their domains are controlled by the institution rather than Web of Science.
-Open the extension popup on the proxied WOS page and select `Diagnose WOS Page` to grant access to that exact HTTPS proxy origin and keep support enabled after refresh.
+CNKI download tools are activated only on compatible CNKI pages. Site-specific tools remain inactive on unrelated pages even though the general content script is available there.
 
 ## Development
 
@@ -72,7 +75,7 @@ The packaged extension files are generated in the `build/` directory. Release ZI
 
 ## Notes
 
-- This extension is designed for WOS-related research workflows on Web of Science.
+- General page and download helpers can run on ordinary HTTP/HTTPS pages; WOS and CNKI-specific features activate only on their compatible sites.
 - API keys are stored locally in Chrome extension storage.
 - Some features require the current page to be a valid Web of Science results page.
 - See [`CHANGELOG.md`](CHANGELOG.md) for recent product and UI updates.
