@@ -1,9 +1,17 @@
 const { classifyWosHost, isWosLocation } = require('./wos-host');
+const {
+  CNKI_DOWNLOAD_SELECTOR,
+  collectCnkiPdfLinks,
+  getDownloadUrlCandidate,
+  isCnkiLocation,
+  resolveDownloadUrl
+} = require('./cnki-pdf-links');
 const isWosPage = () => (
   globalThis.__WOS_AIDE_PROXY_HOST__ === true
   || isWosLocation(window.location.hostname, window.location.href)
 );
 const isChatGptPage = () => /(^|\.)chatgpt\.com$/i.test(window.location.hostname || '');
+const isCnkiPage = () => isCnkiLocation(window.location.hostname);
 const isSameWindowMessage = (event) => event?.source === window;
 const allowStorageBridge = () => isWosPage() || isChatGptPage();
 
@@ -152,6 +160,17 @@ const MODULES = {
     enabledKey: 'doiPdfDownloadEnabled',
     eventName: '__DOI_PDF_DOWNLOAD_VISIBILITY__',
     injectMarker: 'doi-pdf-download-inject'
+  },
+
+  cnkiPdfDownload: {
+    id: 'cnkiPdfDownload',
+    name: 'CNKI Current-page PDF Download',
+    files: ['z-cnki-pdf-download.js'],
+    elementId: 'wos-aide-cnki-pdf-downloader',
+    visibilityKey: 'cnki_pdf_download_panel_visible',
+    enabledKey: 'cnkiPdfDownloadEnabled',
+    eventName: '__CNKI_PDF_DOWNLOAD_VISIBILITY__',
+    injectMarker: 'cnki-pdf-download-inject'
   },
 
   openaiChat: {
@@ -1155,6 +1174,86 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.type === 'GET_CNKI_PDF_LINK_COUNT') {
+    if (!isCnkiPage()) {
+      sendResponse({ success: false, count: 0, error: 'The active page is not a CNKI page.' });
+      return true;
+    }
+    const links = collectCnkiPdfLinks(document, window.location.href);
+    sendResponse({ success: true, count: links.length, href: window.location.href });
+    return true;
+  }
+
+  if (request.type === 'GET_CNKI_PDF_LINKS') {
+    if (!isCnkiPage()) {
+      sendResponse({ success: false, links: [], error: 'The active page is not a CNKI page.' });
+      return true;
+    }
+    const links = collectCnkiPdfLinks(document, window.location.href);
+    sendResponse({
+      success: true,
+      links,
+      href: window.location.href
+    });
+    return true;
+  }
+
+  if (request.type === 'NATIVE_DOWNLOAD_CNKI_LINK') {
+    if (!isCnkiPage()) {
+      sendResponse({ success: false, error: 'The active page is not a CNKI page.' });
+      return true;
+    }
+    const requestedUrl = resolveDownloadUrl(request.url, window.location.href);
+    const downloadElement = Array.from(document.querySelectorAll(CNKI_DOWNLOAD_SELECTOR)).find(element => (
+      resolveDownloadUrl(getDownloadUrlCandidate(element), window.location.href) === requestedUrl
+    ));
+    const clickable = downloadElement?.closest?.('a[href]') || downloadElement;
+    if (!clickable?.click) {
+      sendResponse({ success: false, error: 'The matching CNKI download button is no longer present.' });
+      return true;
+    }
+    clickable.click();
+    sendResponse({ success: true });
+    return true;
+  }
+
+  if (request.type === 'GET_CNKI_PDF_DOWNLOAD_STATE') {
+    const state = getModuleState('cnkiPdfDownload');
+    sendResponse({ success: true, visible: state.visible, exists: state.exists });
+    return true;
+  }
+
+  if (request.type === 'OPEN_CNKI_PDF_DOWNLOAD') {
+    if (!isCnkiPage()) {
+      sendResponse({ success: false, error: 'CNKI PDF Download is available only on CNKI pages.' });
+      return true;
+    }
+    const element = document.getElementById(MODULES.cnkiPdfDownload.elementId);
+    if (element) {
+      element.style.display = 'flex';
+      element.__wosAideScan?.();
+      setModuleVisibility('cnkiPdfDownload', true);
+      sendResponse({ success: true, action: 'shown' });
+      return true;
+    }
+    injectModule('cnkiPdfDownload').then(injectedElement => {
+      injectedElement.style.display = 'flex';
+      setModuleVisibility('cnkiPdfDownload', true);
+      sendResponse({ success: true, action: 'injected' });
+    }).catch(error => {
+      sendResponse({ success: false, error: error?.message || String(error) });
+    });
+    return true;
+  }
+
+  if (request.type === 'CLOSE_CNKI_PDF_DOWNLOAD') {
+    const element = document.getElementById(MODULES.cnkiPdfDownload.elementId);
+    if (element) element.style.display = 'none';
+    setModuleVisibility('cnkiPdfDownload', false);
+    sendResponse({ success: true });
+    return true;
+  }
+
   // EasyScholar 相关消息
   if (request.type === 'GET_EASYSCHOLAR_PANEL_STATE') {
     const state = getModuleState('easyscholar');
@@ -1166,7 +1265,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (!requireWosPage(sendResponse, 'EasyScholar')) {
       return true;
     }
-    sendResponse(openWosDoiQueryPanel('journal'));
+    document.getElementById(MODULES.wosDoiQuery.elementId)?.remove();
+    document.getElementById(MODULES.easyscholar.elementId)?.remove();
+    sendResponse({ success: true, visible: false, action: 'sidepanel-scholar' });
     return true;
   }
 
@@ -1192,33 +1293,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (!requireWosPage(sendResponse, 'EasyScholar')) {
       return true;
     }
-    const element = document.getElementById(MODULES.wosDoiQuery.elementId);
-    if (element) {
-      const isVisible = element.style.display !== 'none';
-      const nextVisible = !isVisible;
-      element.style.display = nextVisible ? 'flex' : 'none';
-      if (nextVisible) {
-        document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
-          detail: { tab: 'journal' }
-        }));
-      }
-      setModuleVisibility('wosDoiQuery', nextVisible);
-      setModuleVisibility('easyscholar', nextVisible);
-      sendResponse({ success: true, visible: nextVisible });
-      return true;
-    }
-
-    injectModule('wosDoiQuery').catch((error) => {
-      console.error('[ContentScript] Failed to inject DOI Batch Query:', error);
-    });
-    setTimeout(() => {
-      setModuleVisibility('wosDoiQuery', true);
-      setModuleVisibility('easyscholar', true);
-      document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
-        detail: { tab: 'journal' }
-      }));
-    }, 100);
-    sendResponse({ success: true, visible: true, action: 'injected' });
+    document.getElementById(MODULES.wosDoiQuery.elementId)?.remove();
+    document.getElementById(MODULES.easyscholar.elementId)?.remove();
+    sendResponse({ success: true, visible: false, action: 'sidepanel-scholar' });
     return true;
   }
 
@@ -1233,17 +1310,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (!requireWosPage(sendResponse, 'DOI Batch Query')) {
       return true;
     }
-    const toolbarShortcutsReady = ensureWosToolbarShortcutsReady();
-    if (toolbarShortcutsReady && !request.forceOpen) {
-      sendResponse({
-        success: true,
-        visible: false,
-        action: 'toolbar-ready',
-        toolbarShortcutsReady: true
-      });
-      return true;
-    }
-    sendResponse(openWosDoiQueryPanel(request.preferredTab));
+    document.getElementById(MODULES.wosDoiQuery.elementId)?.remove();
+    document.getElementById(MODULES.easyscholar.elementId)?.remove();
+    document.getElementById(WOS_TOOLBAR_SHORTCUTS_ID)?.remove();
+    sendResponse({
+      success: true,
+      visible: false,
+      action: request.preferredTab === 'journal' ? 'sidepanel-scholar' : 'sidepanel-wos'
+    });
     return true;
   }
 
@@ -1268,37 +1342,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // DOI PDF Download 相关消息
   if (request.type === 'GET_DOI_PDF_DOWNLOAD_STATE') {
-    const state = getModuleState('doiPdfDownload');
-    sendResponse({ success: true, visible: state.visible, exists: state.exists });
+    sendResponse({ success: true, visible: false, exists: false, location: 'sidepanel' });
     return true;
   }
 
   if (request.type === 'OPEN_DOI_PDF_DOWNLOAD') {
     const element = document.getElementById(MODULES.doiPdfDownload.elementId);
-    if (element) {
-      element.style.display = 'flex';
-      setModuleVisibility('doiPdfDownload', true);
-      sendResponse({ success: true, action: 'shown' });
-      return true;
-    }
-
-    injectModule('doiPdfDownload').then((injectedElement) => {
-      injectedElement.style.display = 'flex';
-      setModuleVisibility('doiPdfDownload', true);
-      sendResponse({ success: true, action: 'injected' });
-    }).catch((error) => {
-      console.error('[ContentScript] Failed to open DOI PDF Download:', error);
-      sendResponse({ success: false, error: error.message });
-    });
+    if (element) element.remove();
+    setModuleVisibility('doiPdfDownload', false);
+    sendResponse({ success: true, action: 'sidepanel' });
     return true;
   }
 
   if (request.type === 'CLOSE_DOI_PDF_DOWNLOAD') {
     const element = document.getElementById(MODULES.doiPdfDownload.elementId);
     if (element) {
-      element.style.display = 'none';
+      element.remove();
       setModuleVisibility('doiPdfDownload', false);
-      sendResponse({ success: true, action: 'hidden' });
+      sendResponse({ success: true, action: 'removed' });
       return true;
     }
     setModuleVisibility('doiPdfDownload', false);
@@ -1317,30 +1378,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (!requireWosPage(sendResponse, 'OpenAI Chat')) {
       return true;
     }
-    const element = document.getElementById(MODULES.openaiChat.elementId);
-    if (element) {
-      element.style.display = 'flex';
-      setModuleVisibility('openaiChat', true);
-      sendResponse({ success: true, action: 'shown' });
-      return true;
-    }
-
-    injectModule('openaiChat').catch((error) => {
-      console.error('[ContentScript] Failed to inject OpenAI Chat:', error);
-    });
-    setTimeout(() => {
-      setModuleVisibility('openaiChat', true);
-    }, 100);
-    sendResponse({ success: true, action: 'injected' });
+    document.getElementById(MODULES.openaiChat.elementId)?.remove();
+    setModuleVisibility('openaiChat', false);
+    sendResponse({ success: true, visible: false, action: 'sidepanel-llm' });
     return true;
   }
 
   if (request.type === 'CLOSE_OPENAI_CHAT') {
     const element = document.getElementById(MODULES.openaiChat.elementId);
     if (element) {
-      element.style.display = 'none';
+      element.remove();
       setModuleVisibility('openaiChat', false);
-      sendResponse({ success: true, action: 'hidden' });
+      sendResponse({ success: true, action: 'removed' });
       return true;
     }
     setModuleVisibility('openaiChat', false);
@@ -1393,57 +1442,16 @@ const isEditableTarget = (target) => {
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 };
 
-document.addEventListener('keydown', (event) => {
-  if (!isWosPage()) {
-    return;
-  }
-  if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) {
-    return;
-  }
-  if (event.key !== '`' && event.code !== 'Backquote') {
-    return;
-  }
-  if (isEditableTarget(event.target)) {
-    return;
-  }
-
-  event.preventDefault();
-  toggleWosDoiQueryPanel();
-});
-
 if (isWosPage()) {
-  chrome.storage.local.get([
-    'easyscholarEnabled',
-    'wosQueryEnabled'
-  ], result => {
-    isEasyScholarEnabledForToolbar = Boolean(result.easyscholarEnabled);
-    isWosQueryEnabledForToolbar = Boolean(result.wosQueryEnabled);
-    bootstrapWosToolbarShortcuts();
-    ensureWosToolbarShortcuts();
-  });
-
-  bootstrapWosToolbarShortcuts();
+  [
+    WOS_TOOLBAR_SHORTCUTS_ID,
+    MODULES.wosDoiQuery.elementId,
+    MODULES.easyscholar.elementId,
+    MODULES.openaiChat.elementId
+  ].forEach(id => document.getElementById(id)?.remove());
 }
 
 if (isWosPage()) {
-  chrome.storage.local.get(['easyscholarEnabled'], result => {
-    if (result.easyscholarEnabled) {
-      setModuleVisibility('easyscholar', true);
-      injectModule('easyscholar').catch((error) => {
-        console.error('[ContentScript] Failed to inject EasyScholar:', error);
-      });
-    }
-  });
-
-  chrome.storage.local.get(['openaiChatEnabled'], result => {
-    if (result.openaiChatEnabled) {
-      setModuleVisibility('openaiChat', true);
-      injectModule('openaiChat').catch((error) => {
-        console.error('[ContentScript] Failed to inject OpenAI Chat:', error);
-      });
-    }
-  });
-
   const notifyEnlightenkeyProject = (projectName) => {
     document.dispatchEvent(new CustomEvent('__WOS_AIDE_PROJECT_UPDATE__', {
       detail: { projectName }
@@ -1460,35 +1468,8 @@ if (isWosPage()) {
     if (areaName !== 'local') {
       return;
     }
-    let shouldRefreshToolbar = false;
-    if (changes.easyscholarEnabled) {
-      isEasyScholarEnabledForToolbar = Boolean(changes.easyscholarEnabled.newValue);
-      shouldRefreshToolbar = true;
-    }
-    if (changes.wosQueryEnabled) {
-      isWosQueryEnabledForToolbar = Boolean(changes.wosQueryEnabled.newValue);
-      shouldRefreshToolbar = true;
-    }
     if (changes.wosAideProjectName) {
       notifyEnlightenkeyProject(changes.wosAideProjectName.newValue || null);
-    }
-    if (changes.doiPdfDownloadEnabled) {
-      const enabled = Boolean(changes.doiPdfDownloadEnabled.newValue);
-      if (enabled) {
-        injectModule('doiPdfDownload').then(element => {
-          element.style.display = 'flex';
-          setModuleVisibility('doiPdfDownload', true);
-        }).catch(error => {
-          console.error('[ContentScript] Failed to enable DOI PDF Download:', error);
-        });
-      } else {
-        const element = document.getElementById(MODULES.doiPdfDownload.elementId);
-        if (element) element.style.display = 'none';
-        setModuleVisibility('doiPdfDownload', false);
-      }
-    }
-    if (shouldRefreshToolbar) {
-      ensureWosToolbarShortcuts();
     }
   });
 
@@ -1499,14 +1480,9 @@ if (isWosPage()) {
 }
 
 if (isWosPage()) {
-  chrome.storage.local.get(['doiPdfDownloadEnabled'], result => {
-    if (result.doiPdfDownloadEnabled) {
-      setModuleVisibility('doiPdfDownload', true);
-      injectModule('doiPdfDownload').catch((error) => {
-        console.error('[ContentScript] Failed to inject DOI PDF Download:', error);
-      });
-    }
-  });
+  const legacyDoiPanel = document.getElementById(MODULES.doiPdfDownload.elementId);
+  if (legacyDoiPanel) legacyDoiPanel.remove();
+  setModuleVisibility('doiPdfDownload', false);
 }
 
 // Inject ChatGPT prompts quickload helper on chatgpt.com

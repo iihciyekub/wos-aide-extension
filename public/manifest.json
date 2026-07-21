@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "minimum_chrome_version": "102",
+  "minimum_chrome_version": "116",
   "name": "WOS Aide",
   "$schema": "https://json.schemastore.org/chrome-manifest.json",
-  "version": "0.1.18",
+  "version": "0.1.21",
   "description": "WOS Aide Chrome Extension",
   "icons": {
     "16": "icons/icon_16.png",
@@ -15,14 +15,27 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "WOS Aide",
-    "default_popup": "popup.html"
+    "default_title": "Open WOS Aide side panel"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   },
   "permissions": [
     "storage",
     "clipboardWrite",
     "activeTab",
-    "scripting"
+    "scripting",
+    "sidePanel",
+    "downloads",
+    "debugger"
+  ],
+  "host_permissions": [
+    "https://www.webofscience.com/*",
+    "https://*.webofscience.com/*",
+    "*://*.webofknowledge.com/*",
+    "*://*.isiknowledge.com/*",
+    "https://oversea.cnki.net/*",
+    "https://*.oversea.cnki.net/*"
   ],
   "optional_host_permissions": [
     "https://*/*",
@@ -48,6 +61,15 @@
       "matches": [
         "https://chatgpt.com/*",
         "https://*.chatgpt.com/*"
+      ],
+      "run_at": "document_idle",
+      "js": [
+        "contentScript.js"
+      ]
+    },
+    {
+      "matches": [
+        "https://oversea.cnki.net/*"
       ],
       "run_at": "document_idle",
       "js": [
@@ -104,6 +126,7 @@
       "resources": [
         "pub-fun.js",
         "z-doi-pdf-download.js",
+        "z-cnki-pdf-download.js",
         "prompts/wos-query.md",
         "all.min.css",
         "all.min.js",

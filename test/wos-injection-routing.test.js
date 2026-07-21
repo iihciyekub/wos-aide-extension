@@ -32,9 +32,24 @@ test('proxy registrations set a persistent WOS marker before extension scripts',
   assert.match(marker, /__WOS_AIDE_PROXY_HOST__\s*=\s*true/);
 });
 
-test('PDF toggle state is persisted and restored', () => {
-  const popup = read('src/popup.js');
+test('DOI PDF downloader is hosted in the side panel without page-overlay auto injection', () => {
+  const sidepanel = read('src/sidepanel.js');
+  const contentScript = read('src/contentScript.js');
 
-  assert.match(popup, /storage\.local\.get\(\['doiPdfDownloadEnabled'\]/);
-  assert.match(popup, /storage\.local\.set\(\{ doiPdfDownloadEnabled: nextEnabled \}/);
+  assert.match(sidepanel, /doiBatchHost|z-doi-pdf-download/);
+  assert.match(sidepanel, /ref-paper-downloader/);
+  assert.doesNotMatch(contentScript, /changes\.doiPdfDownloadEnabled[\s\S]{0,400}injectModule\('doiPdfDownload'\)/);
+});
+
+test('WOS query, UUID export, and journal lookup stay in the side panel', () => {
+  const contentScript = read('src/contentScript.js');
+  const sidepanel = read('src/sidepanel-wos-tools.js');
+
+  assert.match(sidepanel, /clipboard-reader-box/);
+  assert.match(sidepanel, /wos_easyscholar_panel/);
+  assert.match(sidepanel, /wos-aide-toolbar-shortcuts/);
+  assert.match(sidepanel, /showDirectoryPicker/);
+  assert.match(sidepanel, /writeTextFile/);
+  assert.match(sidepanel, /Journal Rank Lookup|FETCH_EASYSCHOLAR_RANK/);
+  assert.doesNotMatch(contentScript, /injectModule\('easyscholar'\)\.catch/);
 });

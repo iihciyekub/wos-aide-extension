@@ -9,7 +9,7 @@ const PATHS = require('./paths');
 // Merge webpack configuration files
 const config = merge(common, {
   entry: {
-    popup: PATHS.src + '/popup.js',
+    sidepanel: PATHS.src + '/sidepanel.js',
     contentScript: PATHS.src + '/contentScript.js',
     background: PATHS.src + '/background.js',
     injected: PATHS.src + '/injected.js',
@@ -22,6 +22,7 @@ const config = merge(common, {
     'z-wos-doi-query': PATHS.src + '/z-wos-doi-query.js',
     'z-chat': PATHS.src + '/z-chat.js',
     'z-doi-pdf-download': PATHS.src + '/z-doi-pdf-download.js',
+    'z-cnki-pdf-download': PATHS.src + '/z-cnki-pdf-download.js',
     'chatgpt-prompts-quickload': PATHS.src + '/chatgpt-prompts-quickload.js',
     'module-bridge': PATHS.src + '/module-bridge.js',
     'module-registry': PATHS.src + '/module-registry.js',

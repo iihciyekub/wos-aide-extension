@@ -543,7 +543,7 @@ async function getPublicationRank(SO) {
             return true;
         }
         console.warn("EasyScholar API key is not configured");
-        setStatus("Please set EasyScholar API Key in popup settings first", "#D32F2F");
+        setStatus("Please set the EasyScholar API Key in the side panel first", "#D32F2F");
         return false;
     }
 

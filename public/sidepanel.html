@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WOS Aide</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+  <link rel="stylesheet" href="all.min.css" />
+</head>
+<body data-surface="sidepanel">
+  <main class="sidepanel-app">
+    <nav class="tab-bar" role="tablist" aria-label="WOS Aide tools">
+      <button class="tab-button is-active" id="tabCnki" data-panel="cnkiPanel" role="tab" aria-selected="true" aria-controls="cnkiPanel" title="CNKI PDF Download">
+        <i class="fa-solid fa-file-pdf" aria-hidden="true"></i>
+        <span>CNKI</span>
+      </button>
+      <button class="tab-button" id="tabWos" data-panel="wosPanel" role="tab" aria-selected="false" aria-controls="wosPanel" title="WOS Tools">
+        <i class="fa-solid fa-globe" aria-hidden="true"></i>
+        <span>WOS</span>
+      </button>
+      <button class="tab-button" id="tabDoi" data-panel="doiPanel" role="tab" aria-selected="false" aria-controls="doiPanel" title="Batch DOI PDF Download">
+        <i class="fa-solid fa-download" aria-hidden="true"></i>
+        <span>Batch DOI</span>
+      </button>
+      <button class="tab-button" id="tabLlm" data-panel="llmPanel" role="tab" aria-selected="false" aria-controls="llmPanel" title="LLM Settings">
+        <i class="fa-solid fa-brain" aria-hidden="true"></i>
+        <span>LLM</span>
+      </button>
+      <button class="tab-button" id="tabScholar" data-panel="scholarPanel" role="tab" aria-selected="false" aria-controls="scholarPanel" title="EasyScholar Settings">
+        <i class="fa-solid fa-graduation-cap" aria-hidden="true"></i>
+        <span>Scholar</span>
+      </button>
+    </nav>
+
+    <div class="tab-content">
+      <section class="tab-panel is-active" id="cnkiPanel" role="tabpanel" aria-labelledby="tabCnki">
+        <header class="section-toolbar">
+          <span>Current-page downloader</span>
+          <button id="refreshPageBtn" class="icon-button" title="Rescan current tab" aria-label="Rescan current tab">
+            <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+          </button>
+        </header>
+
+        <section class="summary-card">
+          <div id="pageStatus" class="status status--info">Reading the active tab…</div>
+          <div class="metric-row">
+            <div class="metric">
+              <span id="pdfCount" class="metric-value">—</span>
+              <span class="metric-label">PDF links on this page</span>
+            </div>
+            <div class="metric">
+              <span id="folderName" class="metric-value metric-value--folder">Not selected</span>
+              <span class="metric-label">Destination folder <span id="folderPermission"></span></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="action-card">
+          <button id="chooseFolderBtn" class="button button--secondary">
+            <i class="fa-regular fa-folder-open" aria-hidden="true"></i>
+            <span id="chooseFolderLabel">Choose Folder</span>
+          </button>
+          <div class="download-options">
+            <label for="downloadIntervalSeconds">
+              <span>Interval</span>
+              <span class="interval-control"><input id="downloadIntervalSeconds" type="number" min="0" max="300" step="0.5" value="1.5"> s</span>
+            </label>
+            <label for="skipExistingPdfs" class="check-option">
+              <input id="skipExistingPdfs" type="checkbox" checked>
+              <span>Skip existing PDFs</span>
+            </label>
+          </div>
+          <button id="downloadBtn" class="button button--primary" disabled>
+            <i class="fa-solid fa-file-arrow-down" aria-hidden="true"></i>
+            <span>Download PDFs</span>
+          </button>
+          <button id="stopBtn" class="button button--danger" disabled>
+            <i class="fa-solid fa-stop" aria-hidden="true"></i>
+            <span>Stop</span>
+          </button>
+          <p class="native-hint">Downloads always use CNKI page clicks and Chrome's download location. The selected folder is used only to check and index existing PDFs.</p>
+        </section>
+
+        <section class="progress-card">
+          <div class="progress-header">
+            <span>Progress</span>
+            <span id="progressText">Idle</span>
+          </div>
+          <div class="progress-track"><span id="progressBar"></span></div>
+          <div id="downloadLog" class="download-log" role="status">Ready.</div>
+        </section>
+      </section>
+
+      <section class="tab-panel" id="wosPanel" role="tabpanel" aria-labelledby="tabWos" hidden>
+        <div class="panel wos-quick-panel" id="wosQuickPanel">
+          <div class="wos-quick-header">
+            <div>
+              <div class="panel-title">WOS Quick Actions</div>
+              <div id="wosQuickStatus" class="helper status--info" role="status">Connecting to the current WOS page...</div>
+            </div>
+            <button id="refreshWosSidBtn" class="icon-button" title="Refresh current SID" aria-label="Refresh current SID">
+              <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+            </button>
+          </div>
+          <div class="wos-sid-row">
+            <input id="wosSidValue" type="text" readonly placeholder="Current SID" aria-label="Current WOS SID" />
+            <button id="copyWosSidBtn" class="icon-button" title="Copy current SID" aria-label="Copy current SID" disabled>
+              <i class="fa-regular fa-copy" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="tool-switch" role="tablist" aria-label="WOS tools">
+          <button id="wosDoiToolTab" class="tool-switch-button is-active" type="button" role="tab" aria-selected="true" aria-controls="wosDoiToolPanel">
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+            <span>DOI / WOS ID</span>
+          </button>
+          <button id="wosUuidToolTab" class="tool-switch-button" type="button" role="tab" aria-selected="false" aria-controls="wosUuidToolPanel">
+            <i class="fa-solid fa-file-arrow-down" aria-hidden="true"></i>
+            <span>UUID Export</span>
+          </button>
+        </div>
+
+        <section id="wosDoiToolPanel" class="flat-card wos-inner-panel" role="tabpanel" aria-labelledby="wosDoiToolTab">
+          <div class="card-heading compact-heading">
+            <div>
+              <strong>DOI / WOS ID Search</strong>
+              <p>Paste mixed identifiers. Duplicates are removed automatically.</p>
+            </div>
+          </div>
+          <textarea id="wosDoiQueryInput" class="compact-textarea" rows="7" placeholder="10.1000/example&#10;WOS:000123456789012"></textarea>
+          <div class="inline-metrics">
+            <span><b id="wosDoiCount">0</b> DOI</span>
+            <span><b id="wosIdCount">0</b> WOS ID</span>
+          </div>
+          <div class="compact-actions">
+            <button id="normalizeWosDoiBtn" class="button button--ghost" type="button">Extract &amp; deduplicate</button>
+            <button id="runWosDoiSearchBtn" class="button button--primary" type="button" disabled>
+              <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+              <span>Search in WOS</span>
+            </button>
+          </div>
+          <div id="wosDoiToolStatus" class="helper status--muted" role="status">Connect to a WOS page first.</div>
+        </section>
+
+        <section id="wosUuidToolPanel" class="flat-card wos-inner-panel" role="tabpanel" aria-labelledby="wosUuidToolTab" hidden>
+          <div class="card-heading compact-heading">
+            <div>
+              <strong>UUID Export</strong>
+              <p>Export the current WOS result set in 500-record files.</p>
+            </div>
+            <button id="refreshWosUuidBtn" class="icon-button" type="button" title="Read UUID from current page" aria-label="Read UUID from current page">
+              <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+            </button>
+          </div>
+          <div class="field-row export-format-row">
+            <label for="wosExportFormat">Format</label>
+            <select id="wosExportFormat">
+              <option value="txt">TXT</option>
+              <option value="bib">BIB</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <input id="wosUuidInput" type="text" placeholder="Current page UUID" autocomplete="off" />
+            <button id="openWosUuidPageBtn" class="button button--ghost" type="button">Open</button>
+          </div>
+          <div id="wosUuidInfo" class="helper status--muted">No UUID detected.</div>
+          <button id="chooseWosExportFolderBtn" class="button button--ghost button--full" type="button">
+            <i class="fa-regular fa-folder-open" aria-hidden="true"></i>
+            <span id="wosExportFolderName">Choose export folder</span>
+          </button>
+          <button id="runWosUuidExportBtn" class="button button--primary button--full" type="button" disabled>
+            <i class="fa-solid fa-file-export" aria-hidden="true"></i>
+            <span>Export all (500 per file)</span>
+          </button>
+          <div class="progress-track compact-progress"><span id="wosExportProgressBar"></span></div>
+          <div id="wosExportStatus" class="helper status--muted" role="status">Select a folder and open a UUID result page.</div>
+        </section>
+
+      </section>
+
+      <section class="tab-panel" id="doiPanel" role="tabpanel" aria-labelledby="tabDoi" hidden>
+        <div id="doiBatchHost" class="doi-batch-host" aria-label="Batch DOI PDF downloader"></div>
+      </section>
+
+      <section class="tab-panel" id="llmPanel" role="tabpanel" aria-labelledby="tabLlm" hidden>
+        <section class="flat-card llm-chat-card">
+          <div class="card-heading compact-heading">
+            <div>
+              <strong>WOS Query Assistant</strong>
+              <p>Describe a search; the selected LLM builds and runs the WOS query.</p>
+            </div>
+            <button id="clearLlmChatBtn" class="icon-button" type="button" title="Clear conversation" aria-label="Clear conversation">
+              <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
+            </button>
+          </div>
+          <div id="llmChatMessages" class="llm-chat-messages" aria-live="polite">
+            <div class="llm-chat-empty">Describe the literature search you want to run.</div>
+          </div>
+          <textarea id="llmChatInput" class="compact-textarea compact-textarea--short" rows="3" placeholder="Example: Studies of platform governance and seller innovation since 2020"></textarea>
+          <div class="compact-actions">
+            <button id="runLastWosQueryBtn" class="button button--ghost" type="button" disabled>
+              <i class="fa-solid fa-play" aria-hidden="true"></i>
+              <span>Run last query</span>
+            </button>
+            <button id="sendLlmChatBtn" class="button button--primary" type="button">
+              <i class="fa-solid fa-paper-plane" aria-hidden="true"></i>
+              <span>Generate &amp; Run</span>
+            </button>
+          </div>
+          <div id="llmChatStatus" class="helper status--muted" role="status">Ready.</div>
+        </section>
+        <div class="panel panel--collapsible" id="openaiSettingsPanel">
+          <button class="panel-header" id="openaiSettingsToggle" aria-expanded="true">
+            <span class="panel-title">LLM Settings</span>
+            <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+          </button>
+          <div class="panel-body" id="openaiSettingsBody">
+            <div class="panel-section">
+              <div class="panel-subtitle">WOS Query Provider</div>
+              <div id="wosQueryProviderDetails">
+                <div class="field-row">
+                  <select id="wosQueryProviderSelect">
+                    <option value="openai">OpenAI</option>
+                    <option value="lmstudio">LM Studio</option>
+                  </select>
+                </div>
+                <div id="wosQueryProviderHint" class="helper">WOS Query Builder uses the selected provider.</div>
+              </div>
+            </div>
+            <div class="panel-section" id="openaiApiSettingsSection">
+              <div class="panel-subtitle">API Key</div>
+              <div class="field-row">
+                <input id="openaiApiKeyInput" type="password" placeholder="sk-..." autocomplete="off" />
+                <button id="openaiApiKeyToggle" class="icon-button" title="Show/Hide API Key"><i class="fa-solid fa-eye" aria-hidden="true"></i></button>
+              </div>
+              <div class="panel-actions">
+                <button id="openaiApiKeySaveBtn" class="button button--ghost">Save API Key</button>
+                <button id="openaiApiKeyClearBtn" class="button button--ghost">Clear</button>
+              </div>
+              <div id="openaiApiKeyHint" class="helper">Stored in extension storage for all pages.</div>
+            </div>
+            <div class="panel-section" id="openaiModelSettingsSection">
+              <div class="panel-subtitle">Chat Model</div>
+              <div class="field-row"><input id="openaiChatModelInput" type="text" placeholder="gpt-4o-mini" autocomplete="off" /></div>
+              <div class="field-row" id="openaiModelSelectRow" style="display:none;">
+                <select id="openaiModelSelect"><option value="">Select a GPT model</option></select>
+              </div>
+              <div class="panel-actions">
+                <button id="openaiLoadModelsBtn" class="button button--ghost">Load Models</button>
+                <button id="openaiChatModelTestBtn" class="button button--ghost">Test</button>
+              </div>
+              <div id="openaiChatModelHint" class="helper">Applies to all chat requests.</div>
+            </div>
+            <div class="panel-section" id="lmStudioSettingsSection" style="display:none;">
+              <div class="panel-subtitle">LM Studio</div>
+              <div class="field-row"><input id="lmStudioBaseUrlInput" type="text" placeholder="http://127.0.0.1:1234/v1" autocomplete="off" /></div>
+              <div class="field-row"><input id="lmStudioModelInput" type="text" placeholder="LM Studio model id" autocomplete="off" /></div>
+              <div class="field-row" id="lmStudioModelSelectRow" style="display:none;">
+                <select id="lmStudioModelSelect"><option value="">Select a loaded model</option></select>
+              </div>
+              <div class="panel-actions"><button id="lmStudioAutofillBtn" class="button button--ghost">Load Models</button></div>
+              <div class="field-row">
+                <input id="lmStudioApiKeyInput" type="password" placeholder="API key (optional)" autocomplete="off" />
+                <button id="lmStudioApiKeyToggle" class="icon-button" title="Show/Hide API Key"><i class="fa-solid fa-eye" aria-hidden="true"></i></button>
+              </div>
+              <div class="panel-actions">
+                <button id="lmStudioSaveBtn" class="button button--ghost">Save LM Studio</button>
+                <button id="lmStudioTestBtn" class="button">Test LM Studio</button>
+              </div>
+              <div id="lmStudioHint" class="helper">Used only when provider is set to LM Studio.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="scholarPanel" role="tabpanel" aria-labelledby="tabScholar" hidden>
+        <div class="panel panel--collapsible" id="easyScholarSettingsPanel">
+          <button class="panel-header" id="easyScholarSettingsToggle" aria-expanded="true">
+            <span class="panel-title">EasyScholar Settings</span>
+            <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+          </button>
+          <div class="panel-body" id="easyScholarSettingsBody">
+            <div class="panel-section">
+              <div class="panel-subtitle">API Key</div>
+              <div class="field-row">
+                <input id="easyScholarApiKeyInput" type="password" placeholder="EasyScholar API Key" autocomplete="off" />
+                <button id="easyScholarApiKeyToggle" class="icon-button" title="Show/Hide API Key"><i class="fa-solid fa-eye" aria-hidden="true"></i></button>
+              </div>
+              <div class="panel-actions">
+                <button id="easyScholarApiKeySaveBtn" class="button button--ghost">Save</button>
+                <button id="easyScholarApiKeyTestBtn" class="button">Test Key</button>
+                <button id="easyScholarApiKeyClearBtn" class="button button--ghost">Clear</button>
+                <button id="easyScholarWebsiteBtn" class="button button--ghost">Apply API Key</button>
+              </div>
+              <div id="easyScholarApiKeyHint" class="helper">Only verified keys can enable Journal Query.</div>
+            </div>
+          </div>
+        </div>
+        <section class="flat-card scholar-query-card">
+          <div class="card-heading compact-heading">
+            <div>
+              <strong>Journal Rank Lookup</strong>
+              <p>Query EasyScholar without opening a page overlay.</p>
+            </div>
+            <i class="fa-solid fa-graduation-cap" aria-hidden="true"></i>
+          </div>
+          <textarea id="scholarJournalInput" class="compact-textarea compact-textarea--short" rows="3" placeholder="Enter a journal title, e.g. Nature"></textarea>
+          <div class="compact-actions compact-actions--three">
+            <button id="openScholarSoBtn" class="button button--ghost" type="button">Open SO</button>
+            <button id="pickScholarJournalBtn" class="button button--ghost" type="button">
+              <i class="fa-solid fa-crosshairs" aria-hidden="true"></i>
+              <span>Pick</span>
+            </button>
+            <button id="searchScholarRankBtn" class="button button--primary" type="button">Search</button>
+          </div>
+          <div id="scholarQueryStatus" class="helper status--muted" role="status">Ready.</div>
+          <div id="scholarRankResults" class="rank-results" hidden></div>
+        </section>
+      </section>
+    </div>
+  </main>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

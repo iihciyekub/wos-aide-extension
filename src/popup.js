@@ -21,6 +21,21 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
   const EASYSCHOLAR_SETTINGS_COLLAPSED_KEY = 'wosEasyScholarSettingsCollapsed';
   const EASYSCHOLAR_API_KEY_SYNC_EVENT = '__EASYSCHOLAR_API_KEY_SYNC__';
   const WOS_QUERY_ACCESS_SYNC_EVENT = '__WOS_QUERY_ACCESS_SYNC__';
+  const isCnkiTabUrl = (value) => {
+    try {
+      return /(^|\.)cnki\.net$/i.test(new URL(value || '').hostname);
+    } catch (_error) {
+      return false;
+    }
+  };
+  const isWosTabUrl = (value) => {
+    try {
+      const parsed = new URL(value || '');
+      return classifyWosHost(parsed.hostname, parsed.href) !== 'unsupported';
+    } catch (_error) {
+      return false;
+    }
+  };
 
   // ========== Status Management ==========
   const statusClasses = ['status--success', 'status--error', 'status--info', 'status--muted'];
@@ -151,18 +166,6 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
     }
   };
 
-  const setDoiPdfDownloadToggle = (button, enabled) => {
-    const icon = button.querySelector('i');
-    const label = button.querySelector('.button-label');
-    if (enabled) {
-      icon.className = 'fa-solid fa-toggle-on';
-      label.textContent = 'Disable DOI PDF Download';
-    } else {
-      icon.className = 'fa-solid fa-toggle-off';
-      label.textContent = 'Enable DOI PDF Download';
-    }
-  };
-
   const withActiveTab = (callback) => {
     chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
       const tab = tabs[0];
@@ -268,12 +271,16 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
   };
 
   document.addEventListener('DOMContentLoaded', () => {
+    const isSidePanelSurface = document.body?.dataset?.surface === 'sidepanel';
+    const wosQuickPanel = document.getElementById('wosQuickPanel');
     const wosQuickStatus = document.getElementById('wosQuickStatus');
     const wosSidValue = document.getElementById('wosSidValue');
     const refreshWosSidBtn = document.getElementById('refreshWosSidBtn');
     const copyWosSidBtn = document.getElementById('copyWosSidBtn');
-    const openWosDoiSearchBtn = document.getElementById('openWosDoiSearchBtn');
-    const openWosUuidDownloadBtn = document.getElementById('openWosUuidDownloadBtn');
+    const cnkiQuickPanel = document.getElementById('cnkiQuickPanel');
+    const cnkiQuickStatus = document.getElementById('cnkiQuickStatus');
+    const refreshCnkiPdfBtn = document.getElementById('refreshCnkiPdfBtn');
+    const openCnkiPdfDownloadBtn = document.getElementById('openCnkiPdfDownloadBtn');
     const openaiSettingsToggle = document.getElementById('openaiSettingsToggle');
     const openaiSettingsBody = document.getElementById('openaiSettingsBody');
     const easyScholarSettingsToggle = document.getElementById('easyScholarSettingsToggle');
@@ -316,8 +323,6 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
     const lmStudioTestBtn = document.getElementById('lmStudioTestBtn');
     const lmStudioHint = document.getElementById('lmStudioHint');
 
-    const openDoiPdfDownloadBtn = document.getElementById('openDoiPdfDownloadBtn');
-    const diagnoseWosBtn = document.getElementById('diagnoseWosBtn');
     const sidDisplay = document.getElementById('popupStatus');
 
     let currentWosTab = null;
@@ -328,8 +333,6 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
     };
 
     const setWosQuickActionsEnabled = (enabled) => {
-      if (openWosDoiSearchBtn) openWosDoiSearchBtn.disabled = !enabled;
-      if (openWosUuidDownloadBtn) openWosUuidDownloadBtn.disabled = !enabled;
       if (copyWosSidBtn) copyWosSidBtn.disabled = !currentPopupSid;
     };
 
@@ -357,12 +360,60 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
       currentPopupSid = '';
       if (wosSidValue) wosSidValue.value = '';
       setWosQuickActionsEnabled(false);
-      setWosQuickStatus('Connecting to the current WOS page...', 'status--info');
+      setWosQuickStatus('', 'status--muted');
 
       const tab = await getActiveTab();
       currentWosTab = tab;
+      const isCnkiTab = !isSidePanelSurface && isCnkiTabUrl(tab?.url);
+      if (wosQuickPanel) wosQuickPanel.hidden = isCnkiTab;
+      if (cnkiQuickPanel) cnkiQuickPanel.hidden = !isCnkiTab;
+      if (isCnkiTab) {
+        if (refreshCnkiPdfBtn) {
+          refreshCnkiPdfBtn.disabled = true;
+          refreshCnkiPdfBtn.querySelector('i')?.classList.add('fa-spin');
+        }
+        if (openCnkiPdfDownloadBtn) openCnkiPdfDownloadBtn.disabled = true;
+        setStatus(cnkiQuickStatus, 'Scanning the current CNKI page...', 'status--info');
+        await new Promise(resolve => {
+          sendMessageToTabWithBootstrap(tab.id, { type: 'GET_CNKI_PDF_LINK_COUNT' }, (error, response) => {
+            if (error || !response?.success) {
+              setStatus(
+                cnkiQuickStatus,
+                error?.message || response?.error || 'Could not scan the current CNKI page.',
+                'status--error'
+              );
+            } else {
+              const count = Number(response.count) || 0;
+              setStatus(
+                cnkiQuickStatus,
+                `${count} unique PDF download link${count === 1 ? '' : 's'} found on this page.`,
+                count ? 'status--success' : 'status--muted'
+              );
+              if (openCnkiPdfDownloadBtn) openCnkiPdfDownloadBtn.disabled = false;
+            }
+            resolve();
+          });
+        });
+        if (refreshCnkiPdfBtn) {
+          refreshCnkiPdfBtn.disabled = false;
+          refreshCnkiPdfBtn.querySelector('i')?.classList.remove('fa-spin');
+        }
+        if (refreshWosSidBtn) {
+          refreshWosSidBtn.disabled = false;
+          refreshWosSidBtn.querySelector('i')?.classList.remove('fa-spin');
+        }
+        return;
+      }
+      if (isSidePanelSurface && !isWosTabUrl(tab?.url)) {
+        setWosQuickStatus('Open a Web of Science page to use these tools.', 'status--muted');
+        if (refreshWosSidBtn) {
+          refreshWosSidBtn.disabled = false;
+          refreshWosSidBtn.querySelector('i')?.classList.remove('fa-spin');
+        }
+        return;
+      }
       if (!tab?.id) {
-        setWosQuickStatus('No active browser tab was found.', 'status--error');
+        setWosQuickStatus('Open a Web of Science page to use these tools.', 'status--muted');
       } else {
         let lastError = '';
         const retryDelays = [0, 150, 400];
@@ -379,10 +430,7 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
           lastError = result.error || lastError;
         }
         if (!currentPopupSid) {
-          setWosQuickStatus(
-            lastError ? `WOS connection failed: ${lastError}` : 'No active SID found. Refresh or sign in to WOS first.',
-            'status--error'
-          );
+          setWosQuickStatus('WOS session is not ready. Refresh or sign in to WOS first.', 'status--muted');
         }
       }
 
@@ -392,28 +440,32 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
       }
     };
 
-    const openWosQuickTool = async (preferredTab, label) => {
-      const tab = currentWosTab?.id ? currentWosTab : await getActiveTab();
-      if (!tab?.id) {
-        setWosQuickStatus('No active WOS tab was found.', 'status--error');
+    refreshWosSidBtn?.addEventListener('click', refreshPopupSid);
+    refreshCnkiPdfBtn?.addEventListener('click', refreshPopupSid);
+    openCnkiPdfDownloadBtn?.addEventListener('click', async () => {
+      const tab = await getActiveTab();
+      if (!tab?.id || !isCnkiTabUrl(tab.url)) {
+        setStatus(cnkiQuickStatus, 'Open a CNKI results page first.', 'status--error');
         return;
       }
-      setWosQuickStatus(`Opening ${label}...`, 'status--info');
-      sendMessageToTabWithBootstrap(
-        tab.id,
-        { type: 'OPEN_WOS_DOI_QUERY', preferredTab, forceOpen: true },
-        (error, response) => {
+      openCnkiPdfDownloadBtn.disabled = true;
+      setStatus(cnkiQuickStatus, 'Opening the CNKI downloader...', 'status--info');
+      chrome.storage.local.set({ cnkiPdfDownloadEnabled: true }, () => {
+        sendMessageToTabWithBootstrap(tab.id, { type: 'OPEN_CNKI_PDF_DOWNLOAD' }, (error, response) => {
           if (error || !response?.success) {
-            setWosQuickStatus(error?.message || response?.error || `Failed to open ${label}.`, 'status--error');
+            openCnkiPdfDownloadBtn.disabled = false;
+            setStatus(
+              cnkiQuickStatus,
+              error?.message || response?.error || 'Failed to open the CNKI downloader.',
+              'status--error'
+            );
             return;
           }
-          setWosQuickStatus(`${label} opened on the WOS page.`, 'status--success');
-          window.setTimeout(() => window.close(), 120);
-        }
-      );
-    };
-
-    refreshWosSidBtn?.addEventListener('click', refreshPopupSid);
+          setStatus(cnkiQuickStatus, 'CNKI downloader opened on the page.', 'status--success');
+          if (!isSidePanelSurface) window.setTimeout(() => window.close(), 120);
+        });
+      });
+    });
     copyWosSidBtn?.addEventListener('click', async () => {
       if (!currentPopupSid) {
         await refreshPopupSid();
@@ -431,9 +483,6 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
         setWosQuickStatus('SID found, but clipboard copy failed.', 'status--error');
       }
     });
-    openWosDoiSearchBtn?.addEventListener('click', () => openWosQuickTool('query', 'DOI Search'));
-    openWosUuidDownloadBtn?.addEventListener('click', () => openWosQuickTool('export', 'UUID Download'));
-
     refreshPopupSid();
 
     // 新增：DOI列表显示区域和清空按钮
@@ -465,10 +514,12 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
     }
 
     // 初始状态
-    doiListDisplay.textContent = '';
-    clearDoiBtn.disabled = true;
-    clearDoiBtn.classList.add('button--disabled');
-    clearDoiBtn.style.display = 'none';
+    if (doiListDisplay) doiListDisplay.textContent = '';
+    if (clearDoiBtn) {
+      clearDoiBtn.disabled = true;
+      clearDoiBtn.classList.add('button--disabled');
+      clearDoiBtn.style.display = 'none';
+    }
 
     // 读取chrome.storage.local中的DOI列表
     chrome.storage.local.get(['wosAideDoiList'], result => {
@@ -482,7 +533,6 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
       }
     });
 
-    let isDoiPdfDownloadEnabled = false;
     let currentEasyScholarApiKey = '';
     let currentEasyScholarVerified = false;
     let currentEasyScholarEnabled = false;
@@ -490,12 +540,6 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
     let currentWosQueryEnabled = false;
     let currentOpenAIVerified = false;
     let currentLmStudioVerified = false;
-
-    setDoiPdfDownloadToggle(openDoiPdfDownloadBtn, false);
-    chrome.storage.local.get(['doiPdfDownloadEnabled'], result => {
-      isDoiPdfDownloadEnabled = Boolean(result.doiPdfDownloadEnabled);
-      setDoiPdfDownloadToggle(openDoiPdfDownloadBtn, isDoiPdfDownloadEnabled);
-    });
 
     const updateApiKeyHint = (message, variant) => {
       if (!apiKeyHint) return;
@@ -737,7 +781,10 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
         syncEasyScholarHintFromState();
       });
       chrome.storage.local.get([EASYSCHOLAR_ENABLED_STORAGE_KEY], result => {
-        currentEasyScholarEnabled = Boolean(result[EASYSCHOLAR_ENABLED_STORAGE_KEY]);
+        currentEasyScholarEnabled = isSidePanelSurface || Boolean(result[EASYSCHOLAR_ENABLED_STORAGE_KEY]);
+        if (isSidePanelSurface) {
+          chrome.storage.local.set({ [EASYSCHOLAR_ENABLED_STORAGE_KEY]: true });
+        }
         if (easyScholarEnabledToggle) {
           easyScholarEnabledToggle.checked = currentEasyScholarEnabled;
         }
@@ -1355,7 +1402,10 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
         WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY
       ], result => {
         currentWosQueryProvider = result[WOS_QUERY_PROVIDER_STORAGE_KEY] || 'openai';
-        currentWosQueryEnabled = Boolean(result[WOS_QUERY_ENABLED_STORAGE_KEY]);
+        currentWosQueryEnabled = isSidePanelSurface || Boolean(result[WOS_QUERY_ENABLED_STORAGE_KEY]);
+        if (isSidePanelSurface) {
+          chrome.storage.local.set({ [WOS_QUERY_ENABLED_STORAGE_KEY]: true });
+        }
         currentOpenAIVerified = Boolean(result[WOS_QUERY_OPENAI_VERIFIED_STORAGE_KEY]);
         currentLmStudioVerified = Boolean(result[WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY]);
         wosQueryProviderSelect.value = currentWosQueryProvider;
@@ -1615,115 +1665,6 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
       });
     }
 
-
-    openDoiPdfDownloadBtn.addEventListener('click', () => {
-      const nextEnabled = !isDoiPdfDownloadEnabled;
-      chrome.storage.local.set({ doiPdfDownloadEnabled: nextEnabled }, () => {
-        if (chrome.runtime.lastError) {
-          setStatus(sidDisplay, `Failed to save PDF state: ${chrome.runtime.lastError.message}`, 'status--error');
-          return;
-        }
-        isDoiPdfDownloadEnabled = nextEnabled;
-        setDoiPdfDownloadToggle(openDoiPdfDownloadBtn, isDoiPdfDownloadEnabled);
-
-        withActiveTab((tab) => {
-          if (!tab) {
-            setStatus(sidDisplay, 'PDF state saved, but no active tab was detected.', 'status--error');
-            return;
-          }
-          sendMessageToTabWithBootstrap(
-            tab.id,
-            { type: isDoiPdfDownloadEnabled ? 'OPEN_DOI_PDF_DOWNLOAD' : 'CLOSE_DOI_PDF_DOWNLOAD' },
-            (error, response) => {
-              if (error) {
-                setStatus(sidDisplay, `PDF state saved; page connection failed: ${error.message}`, 'status--error');
-                return;
-              }
-              if (response && response.success) {
-                setStatus(
-                  sidDisplay,
-                  isDoiPdfDownloadEnabled ? 'DOI PDF download enabled' : 'DOI PDF download disabled',
-                  'status--success'
-                );
-              } else {
-                setStatus(
-                  sidDisplay,
-                  response?.error || 'Failed to toggle DOI PDF download',
-                  'status--error'
-                );
-              }
-            }
-          );
-        });
-      });
-    });
-
-    if (diagnoseWosBtn) {
-      diagnoseWosBtn.addEventListener('click', () => {
-        setStatus(sidDisplay, 'Diagnosing the active WOS page...', 'status--info');
-        withActiveTab(async (tab) => {
-          if (!tab) {
-            setStatus(sidDisplay, 'No active tab detected.', 'status--error');
-            return;
-          }
-
-          let persistentAccess = false;
-          const hostKind = (() => {
-            try {
-              const parsed = new URL(tab.url || '');
-              return classifyWosHost(parsed.hostname, parsed.href);
-            } catch (_error) {
-              return 'unsupported';
-            }
-          })();
-
-          if (hostKind === 'proxy') {
-            try {
-              const parsed = new URL(tab.url);
-              const originPattern = `${parsed.origin}/*`;
-              const granted = await requestOriginPermissions([originPattern]);
-              if (granted) {
-                await registerPersistentWosHost(tab);
-                persistentAccess = true;
-              }
-            } catch (error) {
-              setStatus(sidDisplay, `Proxy access setup failed: ${error.message}`, 'status--error');
-              return;
-            }
-          }
-
-          sendMessageToTabWithBootstrap(tab.id, { type: 'DIAGNOSE_WOS_AIDE' }, (error, response) => {
-            if (error) {
-              setStatus(sidDisplay, `Connection failed: ${error.message}`, 'status--error');
-              return;
-            }
-            if (!response?.success) {
-              setStatus(sidDisplay, response?.error || 'Diagnosis failed.', 'status--error');
-              return;
-            }
-            if (!response.isWosPage) {
-              setStatus(sidDisplay, `Unsupported page: ${response.hostname || 'unknown host'}`, 'status--error');
-              return;
-            }
-
-            const toolbarState = response.toolbar?.visible ? 'visible' : response.toolbar?.exists ? 'hidden' : 'missing';
-            const fontState = response.fontAwesomeReady ? 'icons ready' : 'text fallback active';
-            const injectionState = response.mainWorldInjection?.lastError
-              ? `MAIN error: ${response.mainWorldInjection.lastError}`
-              : 'MAIN injection ready';
-            const accessState = response.wosHostKind === 'proxy'
-              ? persistentAccess ? 'proxy access saved' : 'temporary proxy access'
-              : 'official WOS host';
-            setStatus(
-              sidDisplay,
-              `${response.hostname}\nToolbar: ${toolbarState}; ${fontState}\n${injectionState}; ${accessState}`,
-              response.toolbar?.exists ? 'status--success' : 'status--error'
-            );
-          });
-        });
-      });
-    }
-
     const setPanelCollapsed = (bodyElement, toggleElement, storageKey, collapsed) => {
       if (!bodyElement || !toggleElement) return;
       bodyElement.classList.toggle('is-collapsed', collapsed);
@@ -1733,26 +1674,30 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
     };
 
     if (openaiSettingsToggle) {
-      const isCollapsed = localStorage.getItem(OPENAI_SETTINGS_COLLAPSED_KEY) === 'true';
+      const isCollapsed = !isSidePanelSurface && localStorage.getItem(OPENAI_SETTINGS_COLLAPSED_KEY) === 'true';
       setPanelCollapsed(openaiSettingsBody, openaiSettingsToggle, OPENAI_SETTINGS_COLLAPSED_KEY, isCollapsed);
-      openaiSettingsToggle.addEventListener('click', () => {
-        const nowCollapsed = !openaiSettingsBody || !openaiSettingsBody.classList.contains('is-collapsed');
-        setPanelCollapsed(openaiSettingsBody, openaiSettingsToggle, OPENAI_SETTINGS_COLLAPSED_KEY, nowCollapsed);
-      });
+      if (!isSidePanelSurface) {
+        openaiSettingsToggle.addEventListener('click', () => {
+          const nowCollapsed = !openaiSettingsBody || !openaiSettingsBody.classList.contains('is-collapsed');
+          setPanelCollapsed(openaiSettingsBody, openaiSettingsToggle, OPENAI_SETTINGS_COLLAPSED_KEY, nowCollapsed);
+        });
+      }
     }
 
     if (easyScholarSettingsToggle) {
-      const isCollapsed = localStorage.getItem(EASYSCHOLAR_SETTINGS_COLLAPSED_KEY) === 'true';
+      const isCollapsed = !isSidePanelSurface && localStorage.getItem(EASYSCHOLAR_SETTINGS_COLLAPSED_KEY) === 'true';
       setPanelCollapsed(easyScholarSettingsBody, easyScholarSettingsToggle, EASYSCHOLAR_SETTINGS_COLLAPSED_KEY, isCollapsed);
-      easyScholarSettingsToggle.addEventListener('click', () => {
-        const nowCollapsed = !easyScholarSettingsBody || !easyScholarSettingsBody.classList.contains('is-collapsed');
-        setPanelCollapsed(
-          easyScholarSettingsBody,
-          easyScholarSettingsToggle,
-          EASYSCHOLAR_SETTINGS_COLLAPSED_KEY,
-          nowCollapsed
-        );
-      });
+      if (!isSidePanelSurface) {
+        easyScholarSettingsToggle.addEventListener('click', () => {
+          const nowCollapsed = !easyScholarSettingsBody || !easyScholarSettingsBody.classList.contains('is-collapsed');
+          setPanelCollapsed(
+            easyScholarSettingsBody,
+            easyScholarSettingsToggle,
+            EASYSCHOLAR_SETTINGS_COLLAPSED_KEY,
+            nowCollapsed
+          );
+        });
+      }
     }
 
   });
@@ -1762,7 +1707,7 @@ const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
     {
       type: 'GREETINGS',
       payload: {
-        message: 'Hello, my name is Pop. I am from Popup.',
+        message: 'Hello from the WOS Aide side panel.',
       },
     },
     response => {

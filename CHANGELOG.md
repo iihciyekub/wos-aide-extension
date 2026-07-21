@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.1.21 - 2026-07-21
+
+### Fixed
+- Replaced untrusted JavaScript-generated CNKI mouse events with browser-level trusted input dispatched through the Chrome Debugger protocol.
+- Verified the download control is visible and unobstructed before clicking its viewport coordinates.
+
+## 0.1.20 - 2026-07-21
+
+### Changed
+- Made the CNKI `Download PDFs` action always dispatch page-context pointer and click events to the real CNKI download control, even when an existing-PDF folder is selected.
+- Clarified that Chrome controls the destination of page-click downloads; the selected folder is now used only for duplicate checks and indexing when it matches the actual download location.
+
+## 0.1.19 - 2026-07-21
+
+### Fixed
+- Refreshed each CNKI result link immediately before transfer and retried transient page-context download failures with backoff.
+- Recognized CNKI download controls across list and detail layouts, including links stored in `downloadurl` attributes.
+- Distinguished CNKI login and verification pages from PDF responses instead of transferring and saving invalid content.
+- Kept selected-folder downloads on the File System Access path so files are written to the user-selected directory rather than silently falling back to Chrome Downloads.
+
 ## 0.1.18 - 2026-07-20
 
 ### Added

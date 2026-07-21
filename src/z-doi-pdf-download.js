@@ -16,6 +16,10 @@ const { createAdaptiveConcurrentRunner, normalizeConcurrency } = require("./down
 const { directoryLockName, projectHandleKeyForTab, runWithWebLock } = require("./pdf-tab-directory");
 const { doiFromPdfFileName, pdfFileNameForDoi } = require("./pdf-file-name");
 
+const isDoiSidePanelSurface = Boolean(
+    globalThis.__WOS_AIDE_DOI_SIDE_PANEL__ || document.body?.dataset?.surface === "sidepanel"
+);
+
 const getFallbackTabContextId = () => {
     const storageKey = "wos_aide_pdf_tab_context";
     try {
@@ -34,7 +38,7 @@ const getFallbackTabContextId = () => {
 const injectedTabContextId = String(
     globalThis.__WOS_AIDE_TAB_ID__ || document.currentScript?.dataset?.wosAideTabId || ""
 );
-const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
+const pdfTabContextId = isDoiSidePanelSurface ? "sidepanel" : (injectedTabContextId || getFallbackTabContextId());
 
 
 /**
@@ -199,6 +203,48 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
     const savedLeft = readStorage(POS_LEFT_KEY, null);
     const PANEL_WIDTH = 480;
     const PANEL_MARGIN = 8;
+    let activePageUrl = "";
+
+    const refreshActivePageUrl = async () => {
+        if (!isDoiSidePanelSurface || !globalThis.chrome?.tabs?.query) return activePageUrl;
+        const tabs = await new Promise(resolve => {
+            globalThis.chrome.tabs.query({ active: true, currentWindow: true }, result => resolve(result || []));
+        });
+        activePageUrl = tabs[0]?.url || activePageUrl;
+        return activePageUrl;
+    };
+
+    const activePageOriginPattern = () => {
+        try {
+            const parsed = new URL(activePageUrl);
+            return /^https?:$/.test(parsed.protocol) ? `${parsed.origin}/*` : "";
+        } catch (_error) {
+            return "";
+        }
+    };
+
+    const requestActivePagePermission = (origin) => new Promise(resolve => {
+        globalThis.chrome.permissions.request({ origins: [origin] }, granted => resolve(Boolean(granted)));
+    });
+
+    const ensureActivePagePermission = () => {
+        if (!isDoiSidePanelSurface) return true;
+        if (!globalThis.chrome?.permissions) return false;
+        const currentOrigin = activePageOriginPattern();
+        if (currentOrigin) return requestActivePagePermission(currentOrigin);
+        return refreshActivePageUrl().then(() => {
+            const refreshedOrigin = activePageOriginPattern();
+            return refreshedOrigin ? requestActivePagePermission(refreshedOrigin) : false;
+        });
+    };
+
+    if (isDoiSidePanelSurface) {
+        void refreshActivePageUrl();
+        globalThis.chrome?.tabs?.onActivated?.addListener(() => { void refreshActivePageUrl(); });
+        globalThis.chrome?.tabs?.onUpdated?.addListener((_tabId, changeInfo, tab) => {
+            if (tab.active && (changeInfo.url || changeInfo.status === "complete")) void refreshActivePageUrl();
+        });
+    }
 
 
     // ==============================
@@ -206,8 +252,9 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
     // ==============================
     const box = document.createElement("div");
     box.id = "ref-paper-downloader";
+    box.className = "doi-batch-panel";
     box.style.position = "fixed";
-    const { top, left } = window.clampPanelPosition({
+    const { top, left } = isDoiSidePanelSurface ? { top: 0, left: 0 } : window.clampPanelPosition({
         top: savedTop,
         left: savedLeft,
         defaultTop: 120,
@@ -229,15 +276,28 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
     box.style.color = "#18181b";
     box.style.fontSize = "14px";
     box.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    box.style.display = "none"; // 默认隐藏，等待popup开启
+    box.style.display = isDoiSidePanelSurface ? "flex" : "none";
     box.style.flexDirection = "column";
     box.style.border = "1px solid #d4d4d8";
     box.style.boxShadow = "0 16px 40px rgba(0, 0, 0, 0.16)";
     box.style.overflow = "hidden";
-    document.body.appendChild(box);
+    const sidePanelHost = isDoiSidePanelSurface ? document.getElementById("doiBatchHost") : null;
+    (sidePanelHost || document.body).appendChild(box);
+    if (isDoiSidePanelSurface) {
+        box.style.position = "relative";
+        box.style.inset = "auto";
+        box.style.width = "100%";
+        box.style.zIndex = "auto";
+        box.style.background = "transparent";
+        box.style.border = "0";
+        box.style.borderRadius = "0";
+        box.style.boxShadow = "none";
+        box.style.overflow = "visible";
+    }
 
     // 标题栏容器
     const titleBar = document.createElement("div");
+    titleBar.className = "doi-batch-titlebar";
     titleBar.style.display = "flex";
     titleBar.style.justifyContent = "space-between";
     titleBar.style.alignItems = "center";
@@ -251,6 +311,7 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
     titleBar.style.borderRadius = "9px 9px 0 0";
     titleBar.style.boxSizing = "border-box";
     box.appendChild(titleBar);
+    if (isDoiSidePanelSurface) titleBar.style.display = "none";
 
     // 拖动手柄
     const dragHandle = document.createElement("div");
@@ -287,6 +348,7 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
 
     // 创建内容容器（提前声明和初始化）
     const contentContainer = document.createElement("div");
+    contentContainer.className = "doi-batch-content";
     contentContainer.style.display = "flex";
     contentContainer.style.flexDirection = "column";
     contentContainer.style.gap = "10px";
@@ -298,6 +360,11 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
     contentContainer.style.padding = "14px";
     contentContainer.style.paddingTop = "12px";
     box.appendChild(contentContainer);
+    if (isDoiSidePanelSurface) {
+        contentContainer.style.padding = "0";
+        contentContainer.style.gap = "7px";
+        contentContainer.style.overflow = "visible";
+    }
 
     const applyInputBaseStyle = (el) => {
         el.style.boxSizing = "border-box";
@@ -688,6 +755,7 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
 
     // ---- 工具按钮行 ----
     const toolsRow = document.createElement("div");
+    toolsRow.className = "doi-tools-row";
     toolsRow.style.display = "flex";
     toolsRow.style.gap = "10px";
     toolsRow.style.width = "100%";
@@ -784,12 +852,14 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
 
     // ---- 下载 / 停止按钮 ----
     const downloadActions = document.createElement("div");
+    downloadActions.className = "doi-download-actions";
     downloadActions.style.display = "flex";
     downloadActions.style.gap = "10px";
     downloadActions.style.width = "100%";
     contentContainer.appendChild(downloadActions);
 
     const btn = document.createElement("button");
+    btn.className = "doi-download-primary";
     setIconButtonContent(btn, "fa-download", "Download");
     btn.style.height = "40px";
     btn.style.flex = "1";
@@ -812,6 +882,7 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
     downloadActions.appendChild(btn);
 
     const stopBtn = document.createElement("button");
+    stopBtn.className = "doi-download-stop";
     setIconButtonContent(stopBtn, "fa-stop", "Stop");
     stopBtn.type = "button";
     stopBtn.disabled = true;
@@ -902,6 +973,24 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
     };
     textarea.addEventListener("input", updateDoiCount);
     updateDoiCount();
+
+    if (isDoiSidePanelSurface && globalThis.chrome?.storage?.local) {
+        globalThis.chrome.storage.local.get(["wosAideDoiList"], result => {
+            const list = Array.isArray(result.wosAideDoiList) ? result.wosAideDoiList : [];
+            if (list.length && !textarea.value.trim()) {
+                textarea.value = list.join("\n");
+                updateDoiCount();
+            }
+        });
+        globalThis.chrome.storage.onChanged.addListener((changes, areaName) => {
+            if (areaName !== "local" || !changes.wosAideDoiList) return;
+            const list = Array.isArray(changes.wosAideDoiList.newValue) ? changes.wosAideDoiList.newValue : [];
+            if (list.length || !textarea.value.trim()) {
+                textarea.value = list.join("\n");
+                updateDoiCount();
+            }
+        });
+    }
 
     // 提取函数：从文本中提取 DOI（按出现顺序）
     function extractFromText(text) {
@@ -1320,8 +1409,12 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
     }
 
     async function download_pdf(doi, template, signal, dirHandle) {
-        const url = template.replace("{doi}", doi);
-        const res = await fetch(url, { signal });
+        const rawUrl = template.replace("{doi}", doi);
+        const url = isDoiSidePanelSurface ? new URL(rawUrl, activePageUrl).href : rawUrl;
+        const res = await fetch(url, {
+            signal,
+            credentials: isDoiSidePanelSurface ? "include" : "same-origin"
+        });
         if (!res.ok) {
             throw new Error(`HTTP ${res.status} ${res.statusText}`.trim());
         }
@@ -1355,6 +1448,11 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
 
         if (!lines.length) {
             log("DOI list is empty");
+            return;
+        }
+
+        if (isDoiSidePanelSurface && !await ensureActivePagePermission()) {
+            log("Access to the active publisher site was not granted.");
             return;
         }
 
@@ -1514,6 +1612,7 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
     // 拖动和销毁
     let dragger = null;
     const ensurePanelInView = () => {
+        if (isDoiSidePanelSurface) return;
         const width = box.offsetWidth || PANEL_WIDTH;
         const height = box.offsetHeight || 360;
         const clamped = window.clampPanelPosition({
@@ -1532,7 +1631,7 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
         writeStorage(POS_LEFT_KEY, box.style.left);
     };
 
-    if (typeof window.createFreeDragger === "function") {
+    if (!isDoiSidePanelSurface && typeof window.createFreeDragger === "function") {
         dragger = window.createFreeDragger(box, titleBar, {
             topKey: POS_TOP_KEY,
             leftKey: POS_LEFT_KEY
@@ -1551,9 +1650,11 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
         console.log("[DOI PDF Download] Resources cleaned up");
     };
 
-    closeBtn.addEventListener("click", () => {
-        cleanup();
-    });
+    if (!isDoiSidePanelSurface) {
+        closeBtn.addEventListener("click", () => {
+            cleanup();
+        });
+    }
 
     // 快捷键切换显示/隐藏 (Ctrl+4)
     const keydownHandler = (e) => {
@@ -1564,10 +1665,11 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
             console.log(`[DOI PDF Download] Toggle visibility: ${!isVisible}`);
         }
     };
-    document.addEventListener("keydown", keydownHandler);
+    if (!isDoiSidePanelSurface) document.addEventListener("keydown", keydownHandler);
 
     // 监听来自 content script 的可见性控制事件
     const visibilityHandler = (e) => {
+        if (isDoiSidePanelSurface) return;
         console.log("[DOI PDF Download] Visibility event received:", e.detail);
         if (e.detail && typeof e.detail.visible === 'boolean') {
             const visible = e.detail.visible;
@@ -1580,7 +1682,9 @@ const pdfTabContextId = injectedTabContextId || getFallbackTabContextId();
             }
         }
     };
-    document.addEventListener("__DOI_PDF_DOWNLOAD_VISIBILITY__", visibilityHandler);
+    if (!isDoiSidePanelSurface) {
+        document.addEventListener("__DOI_PDF_DOWNLOAD_VISIBILITY__", visibilityHandler);
+    }
     
     console.log("[DOI PDF Download] Panel initialized and event listeners attached");
 

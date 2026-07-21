@@ -85,6 +85,18 @@ body {
     gap: 10px;
 }
 
+.cnki-quick-panel {
+    gap: 10px;
+}
+
+.cnki-quick-panel[hidden] {
+    display: none;
+}
+
+.cnki-quick-panel > .button {
+    justify-content: center;
+}
+
 .wos-quick-header {
     display: flex;
     align-items: flex-start;

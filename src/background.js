@@ -2,6 +2,17 @@
 
 const { resolveWosSidInMainWorld } = require('./wos-sid-main-world');
 
+const enableActionSidePanel = () => {
+  if (!chrome.sidePanel?.setPanelBehavior) return;
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(error => {
+    console.warn('[WOS Aide] Could not enable action side panel:', error);
+  });
+};
+
+enableActionSidePanel();
+chrome.runtime.onInstalled.addListener(enableActionSidePanel);
+chrome.runtime.onStartup.addListener(enableActionSidePanel);
+
 // With background scripts you can communicate with popup
 // and contentScript files.
 // For more information on background script,
@@ -193,7 +204,7 @@ Additional output rules:
 async function callOpenAI(apiKey, jsonData) {
   const hasPermission = await containsOriginPermissions(OPENAI_HOST_ORIGINS);
   if (!hasPermission) {
-    throw new Error('OpenAI host access is not granted. Open the popup and enable or test OpenAI first.');
+    throw new Error('OpenAI host access is not granted. Open the LLM tab in the side panel and enable or test OpenAI first.');
   }
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
@@ -216,7 +227,7 @@ async function callLmStudio(baseUrl, apiKey, payload) {
     throw new Error('LM Studio host must use localhost or 127.0.0.1 over http.');
   }
   if (!await containsOriginPermissions(origins)) {
-    throw new Error('LM Studio host access is not granted. Open the popup and enable or test LM Studio first.');
+    throw new Error('LM Studio host access is not granted. Open the LLM tab in the side panel and enable or test LM Studio first.');
   }
   const headers = { 'Content-Type': 'application/json' };
   if (apiKey) {
@@ -247,7 +258,7 @@ async function generateWosQuery(text, providerOverride) {
   if (provider === 'lmstudio') {
     const model = storage[LM_STUDIO_MODEL_STORAGE_KEY] || '';
     if (!model) {
-      throw new Error('LM Studio model missing. Please set it in popup.');
+      throw new Error('LM Studio model missing. Please set it in the side panel.');
     }
     const result = await callLmStudio(
       storage[LM_STUDIO_BASE_URL_STORAGE_KEY] || 'http://127.0.0.1:1234/v1',
@@ -276,7 +287,7 @@ async function generateWosQuery(text, providerOverride) {
 
   const apiKey = storage[CHAT_API_KEY_STORAGE_KEY] || '';
   if (!apiKey) {
-    throw new Error('OpenAI API key missing. Please set it in popup.');
+    throw new Error('OpenAI API key missing. Please set it in the side panel.');
   }
   const payload = await buildOpenAIWosQueryPayload(text, storage[CHAT_MODEL_STORAGE_KEY] || 'gpt-4o-mini');
   const result = await callOpenAI(apiKey, payload);
@@ -296,11 +307,11 @@ async function fetchEasyScholarRank(publicationName) {
   const storage = await getStorage([EASYSCHOLAR_API_KEY_STORAGE_KEY]);
   const apiKey = (storage[EASYSCHOLAR_API_KEY_STORAGE_KEY] || '').trim();
   if (!apiKey) {
-    throw new Error('EasyScholar API key missing. Please set it in popup.');
+    throw new Error('EasyScholar API key missing. Please set it in the side panel.');
   }
   const hasPermission = await containsOriginPermissions(EASYSCHOLAR_HOST_ORIGINS);
   if (!hasPermission) {
-    throw new Error('EasyScholar host access is not granted. Open the popup and enable or test EasyScholar first.');
+    throw new Error('EasyScholar host access is not granted. Open the Scholar tab in the side panel and enable or test EasyScholar first.');
   }
 
   const url = `https://www.easyscholar.cc/open/getPublicationRank?secretKey=${encodeURIComponent(apiKey)}&publicationName=${encodeURIComponent(publicationName)}`;
@@ -398,6 +409,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         'z-easyscholar.js',
         'z-wos-doi-query.js',
         'z-doi-pdf-download.js',
+        'z-cnki-pdf-download.js',
         'z-chat.js',
         'injected.js',
         'module-bridge.js',

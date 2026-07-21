@@ -2076,6 +2076,42 @@ class WosUUID {
         };
     }
 
+    /**
+     * Return one export range to extension UI without triggering a page download.
+     * The side panel writes the returned payload to its selected directory.
+     */
+    async export_range_data(markFrom = 1, markTo = 500, format = 'txt') {
+        const res = await this.info();
+        if (!res || res.status === 'failed' || !res.uuid) {
+            throw new Error('Failed to retrieve UUID information from the current WOS page.');
+        }
+
+        const totalRecords = Number.parseInt(String(res.ref_count || '0').replace(/,/g, ''), 10) || 0;
+        const start = Math.max(1, Number.parseInt(markFrom, 10) || 1);
+        const requestedEnd = Math.max(start, Number.parseInt(markTo, 10) || start);
+        const end = totalRecords ? Math.min(requestedEnd, totalRecords) : requestedEnd;
+        this.value = res.uuid;
+
+        const normalizedFormat = format === 'bib' ? 'bib' : 'txt';
+        const data = normalizedFormat === 'bib'
+            ? await this.#export_bib(res.uuid, start, end, 'authorTitleSource')
+            : await this.#export_ext(res.uuid, start, end, 'fullRecord');
+
+        if (data === null || data === undefined) {
+            throw new Error(`Export request failed for records ${start}-${end}.`);
+        }
+
+        return {
+            status: 'completed',
+            uuid: res.uuid,
+            totalRecords,
+            markFrom: start,
+            markTo: end,
+            format: normalizedFormat,
+            data
+        };
+    }
+
 
     async export_pre_200(markFrom = 1, markTo = 0, batchSize = 200, onProgress = null) {
         await this.export_pre_num(markFrom, markTo, batchSize, onProgress);
