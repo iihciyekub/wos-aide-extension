@@ -74,15 +74,13 @@ function initializeLlmSidePanelChat() {
   const renderHistory = () => {
     elements.messages.replaceChildren();
     if (!history.length) {
-      const empty = document.createElement('div');
-      empty.className = 'llm-chat-empty';
-      empty.textContent = 'Describe the literature search you want to run.';
-      elements.messages.appendChild(empty);
+      elements.messages.hidden = true;
       lastRowText = '';
       elements.runBtn.disabled = true;
       return;
     }
 
+    elements.messages.hidden = false;
     history.forEach(item => {
       const userBubble = document.createElement('div');
       userBubble.className = 'llm-chat-message llm-chat-message--user';
@@ -177,4 +175,3 @@ module.exports = {
   initializeLlmSidePanelChat,
   isWosTab
 };
-

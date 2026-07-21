@@ -141,7 +141,7 @@ body[data-surface="sidepanel"] .button { min-height: 34px; }
 .rank-results strong { color: var(--text); text-align: right; overflow-wrap: anywhere; }
 .llm-chat-card { gap: 7px; }
 .llm-chat-messages { display: flex; min-height: 104px; max-height: 250px; flex-direction: column; gap: 6px; overflow: auto; padding: 7px; border: 1px solid var(--border); border-radius: 6px; background: #f5f5f5; }
-.llm-chat-empty { margin: auto; padding: 16px 8px; color: var(--muted); font-size: 10.5px; text-align: center; }
+.llm-chat-messages[hidden] { display: none; }
 .llm-chat-message { max-width: 92%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 10.5px; line-height: 1.45; overflow-wrap: anywhere; }
 .llm-chat-message--user { align-self: flex-end; background: #202123; color: #fff; border-color: #202123; }
 .llm-chat-message--assistant { display: flex; align-self: flex-start; flex-direction: column; gap: 3px; background: #fff; color: var(--text); }

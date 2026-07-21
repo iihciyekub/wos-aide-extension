@@ -15,11 +15,15 @@ test('LLM conversation is hosted in the side panel and runs generated WOS querie
   const contentScript = read('src/contentScript.js');
 
   assert.match(html, /id="llmChatMessages"/);
+  assert.match(html, /id="llmChatMessages"[^>]*hidden/);
+  assert.doesNotMatch(html, /Describe the literature search you want to run/);
   assert.match(html, /id="llmChatInput"/);
   assert.match(html, /id="sendLlmChatBtn"/);
   assert.match(chat, /GENERATE_WOS_QUERY/);
   assert.match(chat, /window\.wos\.query/);
   assert.match(chat, /wosAideLlmChatHistory/);
+  assert.match(chat, /elements\.messages\.hidden = true/);
+  assert.match(chat, /elements\.messages\.hidden = false/);
   assert.doesNotMatch(contentScript, /injectModule\('openaiChat'\)/);
   assert.match(contentScript, /action:\s*'sidepanel-llm'/);
 });

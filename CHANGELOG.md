@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.24 - 2026-07-21
+
+### Changed
+- Hid the WOS Query Assistant conversation area while it has no query history, removing the redundant empty-state prompt and unused space.
+- Restored the conversation area automatically when a generated query is available and hid it again after clearing the conversation.
+
 ## 0.1.23 - 2026-07-21
 
 ### Changed
